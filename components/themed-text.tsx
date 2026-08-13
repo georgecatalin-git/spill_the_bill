@@ -5,7 +5,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  type?: 'title' | 'subtitle' | 'default' | 'label' | 'secondary';
 };
 
 export function ThemedText({
@@ -15,17 +15,20 @@ export function ThemedText({
   type = 'default',
   ...rest
 }: ThemedTextProps) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const color = useThemeColor(
+    { light: lightColor, dark: darkColor },
+    type === 'secondary' ? 'textSecondary' : 'text'
+  );
 
   return (
     <Text
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
+        type === 'title' && styles.title,
+        type === 'subtitle' && styles.subtitle,
+        type === 'default' && styles.default,
+        type === 'label' && styles.label,
+        type === 'secondary' && styles.secondary,
         style,
       ]}
       {...rest}
@@ -34,27 +37,30 @@ export function ThemedText({
 }
 
 const styles = StyleSheet.create({
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  defaultSemiBold: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '600',
-  },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
+    fontSize: 34,
+    lineHeight: 44,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
-  link: {
-    lineHeight: 30,
+  default: {
     fontSize: 16,
-    color: '#0a7ea4',
+    lineHeight: 22,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  secondary: {
+    fontSize: 15,
+    lineHeight: 21,
   },
 });

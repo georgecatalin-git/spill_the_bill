@@ -1,0 +1,423 @@
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { BillSummaryCard } from '@/components/bill/bill-summary-card';
+import { BillTotals } from '@/components/bill/bill-totals';
+import { BillTotalsModal } from '@/components/bill/bill-totals-modal';
+import { EditableItemRow } from '@/components/bill/editable-item-row';
+import { ItemFormModal } from '@/components/bill/item-form-modal';
+import { MyTotal } from '@/components/bill/my-total';
+import { ReceiptItemRow } from '@/components/bill/receipt-item-row';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { Spacing } from '@/constants/theme';
+import { useAdminBill } from '@/hooks/use-admin-bill';
+import { useGuestBill } from '@/hooks/use-guest-bill';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import type { BillItem as DbBillItem } from '@/lib/database';
+import type { BillItem } from '@/lib/types';
+import { useGuest } from '@/providers/guest-provider';
+
+/** Maps a database row onto the shape the shared row components expect. */
+function toLocalItem(row: DbBillItem): BillItem {
+  return {
+    id: row.id,
+    name: row.name,
+    unitPriceCents: row.unit_price_cents,
+    quantity: row.quantity,
+  };
+}
+
+export default function BillScreen() {
+  const { tableId } = useLocalSearchParams<{ tableId?: string }>();
+  const { session } = useGuest();
+
+  // A guest session wins: that device is at the table as a guest, not an admin.
+  if (session) {
+    return <GuestBillScreen sessionToken={session.sessionToken} />;
+  }
+
+  if (tableId) {
+    return <AdminBillScreen tableId={tableId} />;
+  }
+
+  // Reached only by opening /bill directly, with nothing to show.
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <View style={styles.content}>
+          <ScreenHeader title="No bill open" />
+          <EmptyState
+            message="Pick a table first."
+            hint="Open one of your tables and start its bill."
+          />
+          <Button label="Go to my tables" onPress={() => router.replace('/dashboard')} />
+        </View>
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+/** The shared receipt, as a guest sees it. Every figure comes from the server. */
+function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
+  const bill = useGuestBill(sessionToken);
+  const border = useThemeColor({}, 'border');
+  const warning = useThemeColor({}, 'warning');
+
+  const currency = bill.summary?.currency ?? 'EUR';
+  const locked = bill.summary?.status !== 'OPEN';
+
+  if (bill.loading && bill.items.length === 0) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.centered} edges={['bottom']}>
+          <ActivityIndicator />
+          <ThemedText type="secondary">Loading the bill…</ThemedText>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScreenHeader
+            title="Restaurant Bill"
+            subtitle={locked ? 'This bill is closed.' : 'Tap + Add on everything you had.'}
+          />
+
+          {bill.summary && (
+            <BillTotals
+              totalCents={bill.summary.billTotalCents}
+              assignedCents={bill.summary.assignedTotalCents}
+              remainingCents={bill.summary.remainingTotalCents}
+              currency={currency}
+            />
+          )}
+
+          {bill.error && (
+            <ThemedText type="secondary" style={{ color: warning }}>
+              {bill.error}
+            </ThemedText>
+          )}
+
+          {bill.localItems.length === 0 ? (
+            <EmptyState
+              message="No items yet"
+              hint="Waiting for the receipt to be added."
+            />
+          ) : (
+            <View>
+              {bill.localItems.map((item, index) => (
+                <View
+                  key={item.id}
+                  style={[index > 0 && styles.divider, index > 0 && { borderTopColor: border }]}>
+                  <ReceiptItemRow
+                    item={item}
+                    claims={bill.claims}
+                    amounts={bill.amounts[item.id]}
+                    participants={bill.participants}
+                    currentParticipantId={bill.myParticipantId}
+                    currency={currency}
+                    locked={locked}
+                    onClaim={() => bill.claim(item.id)}
+                    onRelease={() => bill.release(item.id)}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+
+          <MyTotal
+            totalCents={bill.myTotalCents}
+            breakdown={bill.items
+              .filter((item) => item.my_quantity > 0)
+              .map((item) => ({
+                item: {
+                  id: item.id,
+                  name: item.name,
+                  unitPriceCents: item.unit_price_cents,
+                  quantity: item.quantity,
+                },
+                shares: item.my_quantity,
+                amountCents: item.my_amount_cents,
+              }))}
+            currency={currency}
+          />
+
+          <Button label="Refresh" variant="secondary" onPress={bill.reload} />
+          <Button
+            label="See everyone"
+            variant="secondary"
+            onPress={() => router.push('/table-overview')}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+/** The real thing: bill, items and totals all come from Supabase. */
+function AdminBillScreen({ tableId }: { tableId: string }) {
+  const bill = useAdminBill(tableId);
+  const border = useThemeColor({}, 'border');
+  const warning = useThemeColor({}, 'warning');
+
+  const [addVisible, setAddVisible] = useState(false);
+  const [totalsVisible, setTotalsVisible] = useState(false);
+  const [editing, setEditing] = useState<DbBillItem | null>(null);
+  const [editMode, setEditMode] = useState(false);
+
+  const currency = bill.bill?.currency ?? 'EUR';
+  const draft = bill.bill?.status === 'DRAFT';
+  const completed = bill.bill?.status === 'COMPLETED';
+
+  function confirmRemove(item: DbBillItem) {
+    Alert.alert('Remove this item?', item.name, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => bill.removeItem(item.id) },
+    ]);
+  }
+
+  if (bill.loading && !bill.bill) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.centered} edges={['bottom']}>
+          <ActivityIndicator />
+          <ThemedText type="secondary">Loading the bill…</ThemedText>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ScreenHeader
+            title="Your Bill"
+            subtitle={draft ? 'Add the items from your receipt.' : 'The bill is open to the table.'}
+          />
+
+          {bill.error && (
+            <ThemedText type="secondary" style={{ color: warning }}>
+              {bill.error}
+            </ThemedText>
+          )}
+
+          <View style={styles.section}>
+            {bill.items.length > 0 && (
+              <ThemedText type="label" style={styles.sectionLabel}>
+                Items · {bill.items.length}
+              </ThemedText>
+            )}
+
+            {bill.items.length === 0 ? (
+              <EmptyState
+                message="No items yet"
+                hint="Add items manually or scan the receipt."
+              />
+            ) : (
+              <View>
+                {bill.items.map((item, index) => (
+                  <View
+                    key={item.id}
+                    style={[index > 0 && styles.divider, index > 0 && { borderTopColor: border }]}>
+                    {draft || editMode ? (
+                      <EditableItemRow
+                        item={toLocalItem(item)}
+                        currency={currency}
+                        onEdit={() => setEditing(item)}
+                        onRemove={() => confirmRemove(item)}
+                      />
+                    ) : (
+                      <ReceiptItemRow
+                        item={toLocalItem(item)}
+                        claims={bill.claims}
+                        amounts={bill.amounts[item.id]}
+                        participants={bill.participants}
+                        currentParticipantId={bill.myParticipantId}
+                        currency={currency}
+                        locked={completed}
+                        onClaim={() => bill.claim(item.id)}
+                        onRelease={() => bill.release(item.id)}
+                      />
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {!draft && !completed && (
+            <Button
+              label={editMode ? 'Done editing' : 'Edit items'}
+              variant="secondary"
+              onPress={() => setEditMode((current) => !current)}
+            />
+          )}
+
+          <View style={styles.actions}>
+            <Button label="Add Item" onPress={() => setAddVisible(true)} />
+            <Button
+              label="Scan Receipt"
+              variant="secondary"
+              onPress={() => router.push({ pathname: '/scan-receipt', params: { tableId } })}
+            />
+          </View>
+
+          {!draft && (
+            <MyTotal
+              totalCents={bill.myTotalCents}
+              breakdown={bill.myBreakdown}
+              currency={currency}
+            />
+          )}
+
+          {bill.bill && (
+            <BillSummaryCard
+              subtotalCents={bill.bill.subtotal_cents}
+              taxCents={bill.bill.tax_cents}
+              serviceChargeCents={bill.bill.service_charge_cents}
+              tipCents={bill.bill.tip_cents}
+              totalCents={bill.bill.total_cents}
+              confirmedTotalCents={bill.bill.confirmed_total_cents}
+              currency={currency}
+            />
+          )}
+
+          <Button
+            label="Edit tax, service & tip"
+            variant="secondary"
+            onPress={() => setTotalsVisible(true)}
+          />
+
+          <Button
+            label="See everyone"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/table-overview', params: { tableId } })}
+          />
+
+          <Button label="Refresh" variant="secondary" onPress={bill.reload} />
+
+          {draft && (
+            <Button
+              label="Start Bill"
+              onPress={async () => {
+                if (await bill.start()) {
+                  Alert.alert('Bill started', 'Everyone at the table can now see it.');
+                }
+              }}
+            />
+          )}
+
+          {!draft && !completed && (
+            <>
+              <Button
+                label="Finish Bill"
+                disabled={bill.blocker !== null}
+                onPress={() =>
+                  router.push({ pathname: '/finish-bill', params: { tableId } })
+                }
+              />
+              {bill.blocker && (
+                <ThemedText type="secondary" style={styles.blocker}>
+                  {bill.blocker}
+                </ThemedText>
+              )}
+            </>
+          )}
+
+          {completed && (
+            <ThemedText type="secondary" style={styles.blocker}>
+              This bill is closed.
+            </ThemedText>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+
+      <ItemFormModal
+        visible={addVisible}
+        onSubmit={async (name, unitPriceCents, quantity) => {
+          setAddVisible(false);
+          await bill.addItem({ name, unitPriceCents, quantity });
+        }}
+        onClose={() => setAddVisible(false)}
+      />
+
+      {editing && (
+        <ItemFormModal
+          key={editing.id}
+          visible
+          title="Edit item"
+          submitLabel="Save item"
+          initialName={editing.name}
+          initialPriceCents={editing.unit_price_cents}
+          initialQuantity={editing.quantity}
+          onSubmit={async (name, unitPriceCents, quantity) => {
+            const target = editing;
+            setEditing(null);
+            await bill.editItem(target.id, { name, unitPriceCents, quantity });
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {bill.bill && (
+        <BillTotalsModal
+          visible={totalsVisible}
+          subtotalCents={bill.bill.subtotal_cents}
+          taxCents={bill.bill.tax_cents}
+          serviceChargeCents={bill.bill.service_charge_cents}
+          tipCents={bill.bill.tip_cents}
+          confirmedTotalCents={bill.bill.confirmed_total_cents}
+          currency={currency}
+          onSubmit={async (input) => {
+            setTotalsVisible(false);
+            await bill.saveTotals(input);
+          }}
+          onClose={() => setTotalsVisible(false)}
+        />
+      )}
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+  },
+  content: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  section: {
+    gap: Spacing.md,
+  },
+  sectionLabel: {
+    opacity: 0.6,
+  },
+  divider: {
+    borderTopWidth: 1,
+  },
+  actions: {
+    gap: Spacing.sm,
+  },
+  blocker: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+});
