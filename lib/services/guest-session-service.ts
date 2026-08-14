@@ -31,9 +31,15 @@ function toFriendlyError(error: unknown) {
 
   const message = messageOf(error);
 
+  // The server says "link", because for a long time a link was the only way
+  // in. A code typed by hand reaches the same function, so the wording has to
+  // fit both doors.
+  if (message.includes('Invalid invitation link')) {
+    return new GuestError('That invitation is not valid. Check the code and try again.');
+  }
+
   // Messages raised by the database functions are already guest-facing.
   if (
-    message.includes('Invalid invitation link') ||
     message.includes('no longer accepting guests') ||
     message.includes('session has expired') ||
     message.includes('enter your name') ||

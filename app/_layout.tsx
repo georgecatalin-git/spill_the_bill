@@ -40,6 +40,7 @@ export default function RootLayout() {
             <Stack.Screen name="scan-receipt" options={backOnlyHeader} />
             <Stack.Screen name="review-receipt" options={backOnlyHeader} />
             <Stack.Screen name="review-items" options={backOnlyHeader} />
+            <Stack.Screen name="join/index" options={backOnlyHeader} />
             <Stack.Screen name="join/[code]" options={backOnlyHeader} />
             <Stack.Screen name="joined" />
             <Stack.Screen name="participant/[id]" options={backOnlyHeader} />

@@ -14,6 +14,19 @@ export function buildInvitationLink(code: string) {
   return Linking.createURL(`/join/${code}`);
 }
 
+/**
+ * The message that gets sent.
+ *
+ * The code comes first and the link second, deliberately: the link uses the
+ * app's own scheme, which messaging apps render as dead text. Someone who
+ * already has Split can always fall back to typing the code into "Join a
+ * Table", so the part that works has to be the part they read first.
+ */
 export function buildInvitationMessage(code: string) {
-  return `Join my table on Split 🍽️\nTap to join: ${buildInvitationLink(code)}`;
+  return [
+    'Join my table on Split 🍽️',
+    `Table code: ${code}`,
+    'Open Split and tap "Join a Table", or use this link:',
+    buildInvitationLink(code),
+  ].join('\n');
 }

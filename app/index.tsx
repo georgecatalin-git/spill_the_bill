@@ -64,6 +64,14 @@ export default function WelcomeScreen() {
         <View style={styles.actions}>
           <Button label="Get Started" onPress={() => router.push('/register')} />
           <Button label="Log In" variant="secondary" onPress={() => router.push('/login')} />
+          {/* Both buttons above are admin doors. A guest holding a code had
+              none: invitation links carry the app's own scheme, which
+              messaging apps will not make tappable. */}
+          <Button
+            label="Join a Table"
+            variant="secondary"
+            onPress={() => router.push('/join')}
+          />
         </View>
       </SafeAreaView>
     </ThemedView>

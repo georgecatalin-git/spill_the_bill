@@ -56,7 +56,8 @@ export function InvitationModal({
           Invite people to your table
         </ThemedText>
         <ThemedText type="secondary">
-          Anyone with this link can join. No account needed.
+          Send the link, or read the code out — anyone with Split can enter it
+          under &quot;Join a Table&quot;. No account needed.
         </ThemedText>
       </View>
 
