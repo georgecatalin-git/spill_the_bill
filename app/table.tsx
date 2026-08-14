@@ -9,8 +9,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ConnectionIndicator } from '@/components/ui/connection-status';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
+import { useRealtimeTable } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getTable, listParticipants } from '@/lib/services/table-service';
 import { buildInvitationLink, buildInvitationMessage } from '@/lib/table';
@@ -69,6 +71,10 @@ export default function TableScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The table topic rather than the bill: this screen exists before there is
+  // a bill, and what it shows is people arriving.
+  const { connectionStatus } = useRealtimeTable(id, load);
 
   const participants = people;
 
@@ -132,6 +138,7 @@ export default function TableScreen() {
               <ThemedText type="label" style={styles.sectionLabel}>
                 People at the table{participants.length > 0 ? ` · ${participants.length}` : ''}
               </ThemedText>
+              <ConnectionIndicator status={connectionStatus} />
             </View>
             <ParticipantList participants={participants} />
             <Button label="Refresh" variant="secondary" onPress={load} />

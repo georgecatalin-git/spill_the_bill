@@ -8,16 +8,28 @@ import { ThemedView } from '@/components/themed-view';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
+import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCents } from '@/lib/money';
 import { getActiveBill } from '@/lib/services/bill-service';
-import { getGuestClaims, getGuestTotals } from '@/lib/services/claim-service';
+import {
+  getBillAssignmentSummary,
+  getGuestClaims,
+  getGuestTotals,
+} from '@/lib/services/claim-service';
 import { getBillClaimDetails } from '@/lib/services/overview-service';
 import { listParticipants } from '@/lib/services/table-service';
 import { useGuest } from '@/providers/guest-provider';
 
 type Line = { id: string; name: string; quantity: number; amountCents: number };
-type Detail = { name: string; currency: string; totalCents: number; lines: Line[] };
+type Detail = {
+  /** The bill these lines came from, so the screen can follow it live. */
+  billId: string;
+  name: string;
+  currency: string;
+  totalCents: number;
+  lines: Line[];
+};
 
 /** What one person at the table has claimed. Visible to everyone at that table. */
 export default function ParticipantScreen() {
@@ -47,6 +59,10 @@ export default function ParticipantScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // What one person owes moves when anyone else claims a shared line, so this
+  // screen has to follow the whole bill, not just this participant.
+  useRealtimeBill(detail?.billId, load);
 
   if (loading) {
     return (
@@ -125,13 +141,14 @@ export default function ParticipantScreen() {
 }
 
 async function loadAsGuest(sessionToken: string, participantId: string): Promise<Detail | null> {
-  const [items, totals] = await Promise.all([
+  const [items, totals, summary] = await Promise.all([
     getGuestClaims(sessionToken),
     getGuestTotals(sessionToken),
+    getBillAssignmentSummary(sessionToken),
   ]);
 
   const person = totals.find((total) => total.participant_id === participantId);
-  if (!person) return null;
+  if (!person || !summary) return null;
 
   const lines: Line[] = [];
 
@@ -147,7 +164,13 @@ async function loadAsGuest(sessionToken: string, participantId: string): Promise
     }
   }
 
-  return { name: person.participant_name, currency: 'EUR', totalCents: person.total_cents, lines };
+  return {
+    billId: summary.billId,
+    name: person.participant_name,
+    currency: summary.currency,
+    totalCents: person.total_cents,
+    lines,
+  };
 }
 
 async function loadAsAdmin(
@@ -171,6 +194,7 @@ async function loadAsAdmin(
   const mine = details.filter((row) => row.participant_id === participantId);
 
   return {
+    billId: bill.id,
     name: person.name ?? '',
     currency: bill.currency,
     totalCents: mine.reduce((sum, row) => sum + (row.amount_cents ?? 0), 0),

@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Spacing } from '@/constants/theme';
+import { useRealtimeTable } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import {
   getGuestParticipants,
@@ -19,8 +20,9 @@ import { useGuest } from '@/providers/guest-provider';
 /**
  * Guest view straight after joining.
  *
- * Waits here until the admin opens the bill. There is no realtime yet, so the
- * guest can pull the latest state with Refresh.
+ * Waits here until the admin opens the bill. The table topic pushes both
+ * arrivals and the status change, so the wait ends on its own; Refresh stays
+ * for anyone who would rather not trust that.
  */
 export default function JoinedScreen() {
   const { session, leave } = useGuest();
@@ -55,6 +57,10 @@ export default function JoinedScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live from here: people arriving, and the table status turning over the
+  // moment the admin opens the bill.
+  useRealtimeTable(session?.tableId, load);
 
   const tableName = table?.name ?? session?.guestName ?? 'the table';
   const ready = (table?.status ?? 'WAITING_FOR_GUESTS') !== 'WAITING_FOR_GUESTS';

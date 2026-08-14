@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import type { Bill, BillClaimDetail, BillItem, BillSummary } from '@/lib/database';
 import {
   adminClaimItem,
@@ -62,10 +63,15 @@ export function useAdminBill(tableId: string | undefined) {
     myParticipantId: '',
   });
 
-  const load = useCallback(async () => {
+  /**
+   * `silent` is for reloads nobody asked for — the ones realtime triggers.
+   * They must not raise the spinner over a screen that is already showing
+   * figures, nor wipe the message explaining why the last action failed.
+   */
+  const load = useCallback(async (silent = false) => {
     if (!tableId) return;
 
-    setState((current) => ({ ...current, loading: true, error: null }));
+    if (!silent) setState((current) => ({ ...current, loading: true, error: null }));
 
     try {
       const bill = await getOrCreateActiveBill(tableId);
@@ -78,12 +84,12 @@ export function useAdminBill(tableId: string | undefined) {
         getAdminParticipantId(tableId),
       ]);
 
-      setState({
+      setState((current) => ({
         bill,
         items,
         summary,
         loading: false,
-        error: null,
+        error: silent ? current.error : null,
         blocker,
         ...shapeClaims(details),
         participants: people.map((person) => ({
@@ -92,7 +98,7 @@ export function useAdminBill(tableId: string | undefined) {
           isAdmin: person.is_admin ?? false,
         })),
         myParticipantId: meId ?? '',
-      });
+      }));
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -105,6 +111,11 @@ export function useAdminBill(tableId: string | undefined) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live from here on. The bill id only exists after the first load, which is
+  // the right order anyway: realtime says what changed, it never says what the
+  // state is, so there has to be a state to update.
+  const { connectionStatus } = useRealtimeBill(state.bill?.id, () => load(true));
 
   /** Runs a mutation, then reloads so the totals come back from the server. */
   const mutate = useCallback(
@@ -186,7 +197,8 @@ export function useAdminBill(tableId: string | undefined) {
 
   return {
     ...state,
-    reload: load,
+    connectionStatus,
+    reload: () => load(),
     addItem,
     editItem,
     removeItem,

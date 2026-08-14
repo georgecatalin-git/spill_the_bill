@@ -57,6 +57,8 @@ any id sent by the client.
 app/                     screens (expo-router)
   (admin)/               dashboard · tables · profile, behind an auth guard
   join/[code].tsx        guest entry from an invitation link
+hooks/
+  use-realtime-bill.ts   the only Supabase Realtime subscription
 lib/
   money.ts               cents, formatting, largest-remainder split
   split.ts               display-side helpers for the receipt rows
@@ -79,6 +81,7 @@ Migrations are the source of truth and are applied in order:
 | `20260813120000_guest_sessions` | invite codes, join/leave, guest reads |
 | `20260813180000_bill_management` | tax, service, tip, confirmed total, dashboard view |
 | `20260813210000_item_claims` | claiming, availability, admin claims |
+| `20260814000000_realtime_sync` | change broadcasts for bills and tables |
 
 Regenerate types after any schema change:
 
@@ -104,9 +107,42 @@ npx expo start -c
 Requires `.env` (see `.env.example`). The app does not run without it, by
 design.
 
+## Realtime
+
+Everyone at a table sees the same figures without pressing anything.
+
+Postgres triggers send a **signal, never content**: `{bill_id, source, event}`
+on the topic `bill:<uuid>` (and `table:<uuid>` for the screens that exist
+before the bill does). Every client then re-reads the authoritative state
+through the path it is already allowed to use. Nothing is merged into local
+state and nothing is recomputed on the device — one person claiming a shared
+line changes what *everyone else* on that line owes, and only Postgres knows
+the largest-remainder answer.
+
+`postgres_changes` is deliberately not used. It replays rows through RLS as
+the connecting role, and guests are `anon` with no grant on any table; making
+it work would mean handing `anon` direct SELECT on bills, items, claims and
+participants. Broadcast keeps the boundary exactly where it was. The
+`supabase_realtime` publication stays empty.
+
+The topics are public, because a private topic can only be joined by an
+authenticated client and guests have no account by design. The bill id is what
+guards the topic — 122 random bits that reach a device only through an
+authorised read — and the message carries nothing to read even if it leaked.
+
+`hooks/use-realtime-bill.ts` is the only place that talks to Realtime. It
+reference-counts one channel per topic, coalesces bursts into a single reload,
+and re-reads after a reconnection or a return to the foreground.
+
+One trap worth remembering: `realtime.messages` is partitioned by day and its
+partitions are created by the Realtime service, not by the schema. On a
+project that has never opened a Realtime connection there are none, and
+`realtime.send` swallows the failure as a `WARNING` — every broadcast silently
+vanishes. One client connection creates them.
+
 ## Not built yet
 
-Realtime, OCR, payments, and https universal links. The receipt parser is a
+OCR, payments, and https universal links. The receipt parser is a
 stand-in behind a `ReceiptParser` contract — swapping in real OCR is one line
 in `lib/receipt/index.ts`.
 

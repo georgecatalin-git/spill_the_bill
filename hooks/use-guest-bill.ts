@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import {
   claimItem,
   getBillAssignmentSummary,
@@ -56,6 +57,11 @@ export function useGuestBill(sessionToken: string | undefined) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // The bill id arrives with the first summary; before that there is nothing
+  // to subscribe to. `keepError` is on, because a background reload must not
+  // wipe the reason a claim was just refused.
+  const { connectionStatus } = useRealtimeBill(summary?.billId, () => load(true));
 
   const mutate = useCallback(
     async (action: () => Promise<void>) => {
@@ -140,6 +146,7 @@ export function useGuestBill(sessionToken: string | undefined) {
     summary,
     loading,
     error,
+    connectionStatus,
     myTotalCents: me?.total_cents ?? 0,
     myParticipantId: me?.participant_id ?? '',
     ...view,

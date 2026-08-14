@@ -13,6 +13,7 @@ import { ReceiptItemRow } from '@/components/bill/receipt-item-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { ConnectionIndicator } from '@/components/ui/connection-status';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
@@ -92,6 +93,8 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
             subtitle={locked ? 'This bill is closed.' : 'Tap + Add on everything you had.'}
           />
 
+          <ConnectionIndicator status={bill.connectionStatus} />
+
           {bill.summary && (
             <BillTotals
               totalCents={bill.summary.billTotalCents}
@@ -151,12 +154,14 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
             currency={currency}
           />
 
-          <Button label="Refresh" variant="secondary" onPress={bill.reload} />
+          {/* The overview answers "what do I owe and who owes what", so it
+              comes before the refresh nobody should need any more. */}
           <Button
             label="See everyone"
             variant="secondary"
             onPress={() => router.push('/table-overview')}
           />
+          <Button label="Refresh" variant="secondary" onPress={bill.reload} />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -204,6 +209,8 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
             title="Your Bill"
             subtitle={draft ? 'Add the items from your receipt.' : 'The bill is open to the table.'}
           />
+
+          <ConnectionIndicator status={bill.connectionStatus} />
 
           {bill.error && (
             <ThemedText type="secondary" style={{ color: warning }}>
