@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
-import type { Bill, BillClaimDetail, BillItem, BillSummary } from '@/lib/database';
+import type { Bill, BillClaimDetail, BillItem, BillSummary, BillTipShareRow } from '@/lib/database';
 import {
   adminClaimItem,
   adminUpdateClaimQuantity,
   getAdminParticipantId,
 } from '@/lib/services/claim-service';
-import { getBillClaimDetails } from '@/lib/services/overview-service';
+import { getBillClaimDetails, getBillTipShares } from '@/lib/services/overview-service';
 import { listParticipants } from '@/lib/services/table-service';
 import type { ClaimMap, Participant } from '@/lib/types';
 import {
@@ -40,6 +40,8 @@ type State = {
   amounts: Record<string, Record<string, number>>;
   participants: Participant[];
   myParticipantId: string;
+  /** Everyone's flat slice of the tip, split by headcount. */
+  tipShares: BillTipShareRow[];
 };
 
 /**
@@ -61,6 +63,7 @@ export function useAdminBill(tableId: string | undefined) {
     amounts: {},
     participants: [],
     myParticipantId: '',
+    tipShares: [],
   });
 
   /**
@@ -75,13 +78,14 @@ export function useAdminBill(tableId: string | undefined) {
 
     try {
       const bill = await getOrCreateActiveBill(tableId);
-      const [items, summary, blocker, details, people, meId] = await Promise.all([
+      const [items, summary, blocker, details, people, meId, tipShares] = await Promise.all([
         getBillItems(bill.id),
         getBillSummary(bill.id),
         getCompletionBlocker(bill.id),
         getBillClaimDetails(bill.id),
         listParticipants(tableId),
         getAdminParticipantId(tableId),
+        getBillTipShares(bill.id),
       ]);
 
       setState((current) => ({
@@ -98,6 +102,7 @@ export function useAdminBill(tableId: string | undefined) {
           isAdmin: person.is_admin ?? false,
         })),
         myParticipantId: meId ?? '',
+        tipShares,
       }));
     } catch (error) {
       setState((current) => ({
@@ -193,11 +198,19 @@ export function useAdminBill(tableId: string | undefined) {
     }))
     .filter((entry) => entry.shares > 0);
 
-  const myTotalCents = myBreakdown.reduce((sum, entry) => sum + entry.amountCents, 0);
+  const myItemsCents = myBreakdown.reduce((sum, entry) => sum + entry.amountCents, 0);
+  const myTipCents =
+    state.tipShares.find((share) => share.participant_id === state.myParticipantId)
+      ?.tip_share_cents ?? 0;
+
+  // Items plus this admin's own flat slice of the tip — they eat at their own
+  // table too, and owe the same tip share as everyone else active there.
+  const myTotalCents = myItemsCents + myTipCents;
 
   return {
     ...state,
     connectionStatus,
+    myTipCents,
     reload: () => load(),
     addItem,
     editItem,

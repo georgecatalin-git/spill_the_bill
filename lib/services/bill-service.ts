@@ -62,6 +62,33 @@ export async function getActiveBill(tableId: string): Promise<Bill | null> {
   return data;
 }
 
+/**
+ * The table's bill, open or closed.
+ *
+ * Guests read their table's bill without caring what state it is in, so the
+ * admin side has to resolve the same row. Asking only for an *active* bill is
+ * what let a closed table show the admin one set of figures and every guest
+ * another.
+ *
+ * Ordered like the guest functions do it — earliest first — so both sides land
+ * on the same row rather than on two readings of "the" bill.
+ */
+export async function getTableBill(tableId: string): Promise<Bill | null> {
+  const active = await getActiveBill(tableId);
+  if (active) return active;
+
+  const { data, error } = await supabase
+    .from('bills')
+    .select()
+    .eq('table_id', tableId)
+    .order('created_at')
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw toFriendlyError(error, 'Could not load the bill.');
+  return data;
+}
+
 export async function getBill(billId: string): Promise<Bill | null> {
   const { data, error } = await supabase.from('bills').select().eq('id', billId).maybeSingle();
 
@@ -86,9 +113,13 @@ export async function createBill(tableId: string, currency = 'EUR'): Promise<Bil
  * A table may only have one open bill — the database enforces that with a
  * partial unique index — so an existing one is loaded rather than duplicated.
  * If two devices race, the loser's insert fails and we read the winner's row.
+ *
+ * A closed bill counts as existing. A table whose bill has been settled is
+ * finished, not empty, and creating a fresh draft for it left the admin
+ * staring at €0.00 on a table everyone else could still read.
  */
 export async function getOrCreateActiveBill(tableId: string, currency = 'EUR'): Promise<Bill> {
-  const existing = await getActiveBill(tableId);
+  const existing = await getTableBill(tableId);
   if (existing) return existing;
 
   try {

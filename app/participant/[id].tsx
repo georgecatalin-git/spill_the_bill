@@ -11,13 +11,14 @@ import { Spacing } from '@/constants/theme';
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCents } from '@/lib/money';
-import { getActiveBill } from '@/lib/services/bill-service';
+import { getTableBill } from '@/lib/services/bill-service';
 import {
   getBillAssignmentSummary,
   getGuestClaims,
   getGuestTotals,
+  getTipShares,
 } from '@/lib/services/claim-service';
-import { getBillClaimDetails } from '@/lib/services/overview-service';
+import { getBillClaimDetails, getBillTipShares } from '@/lib/services/overview-service';
 import { listParticipants } from '@/lib/services/table-service';
 import { useGuest } from '@/providers/guest-provider';
 
@@ -27,8 +28,11 @@ type Detail = {
   billId: string;
   name: string;
   currency: string;
+  /** Item lines plus the flat tip share — the full amount this person owes. */
   totalCents: number;
   lines: Line[];
+  /** This person's flat slice of the tip, already folded into `totalCents`. */
+  tipCents: number;
 };
 
 /** What one person at the table has claimed. Visible to everyone at that table. */
@@ -101,7 +105,7 @@ export default function ParticipantScreen() {
             </ThemedText>
           )}
 
-          {detail.lines.length === 0 ? (
+          {detail.lines.length === 0 && !detail.tipCents ? (
             <EmptyState
               message="Nothing claimed yet"
               hint={`${detail.name} hasn't picked anything from the receipt.`}
@@ -126,6 +130,22 @@ export default function ParticipantScreen() {
                 </View>
               ))}
 
+              {Boolean(detail.tipCents) && (
+                <View
+                  style={[
+                    styles.row,
+                    detail.lines.length > 0 && styles.divider,
+                    detail.lines.length > 0 && { borderTopColor: border },
+                  ]}>
+                  <ThemedText style={styles.name} numberOfLines={1}>
+                    Tip (split evenly)
+                  </ThemedText>
+                  <ThemedText style={styles.amount}>
+                    {formatCents(detail.tipCents, detail.currency)}
+                  </ThemedText>
+                </View>
+              )}
+
               <View style={[styles.totalRow, { borderTopColor: border }]}>
                 <ThemedText style={styles.totalLabel}>Total</ThemedText>
                 <ThemedText style={styles.totalValue}>
@@ -141,10 +161,11 @@ export default function ParticipantScreen() {
 }
 
 async function loadAsGuest(sessionToken: string, participantId: string): Promise<Detail | null> {
-  const [items, totals, summary] = await Promise.all([
+  const [items, totals, summary, tipShares] = await Promise.all([
     getGuestClaims(sessionToken),
     getGuestTotals(sessionToken),
     getBillAssignmentSummary(sessionToken),
+    getTipShares(sessionToken),
   ]);
 
   const person = totals.find((total) => total.participant_id === participantId);
@@ -164,12 +185,16 @@ async function loadAsGuest(sessionToken: string, participantId: string): Promise
     }
   }
 
+  const tipCents =
+    tipShares.find((share) => share.participant_id === participantId)?.tip_share_cents ?? 0;
+
   return {
     billId: summary.billId,
     name: person.participant_name,
     currency: summary.currency,
-    totalCents: person.total_cents,
+    totalCents: person.total_cents + tipCents,
     lines,
+    tipCents,
   };
 }
 
@@ -179,12 +204,15 @@ async function loadAsAdmin(
 ): Promise<Detail | null> {
   if (!tableId) return null;
 
-  const bill = await getActiveBill(tableId);
+  // Open or closed: what someone owed does not stop mattering once the bill
+  // is settled — that is exactly when people look it up.
+  const bill = await getTableBill(tableId);
   if (!bill) return null;
 
-  const [details, everyone] = await Promise.all([
+  const [details, everyone, tipShares] = await Promise.all([
     getBillClaimDetails(bill.id),
     listParticipants(tableId),
+    getBillTipShares(bill.id),
   ]);
 
   const person = everyone.find((candidate) => candidate.id === participantId);
@@ -192,18 +220,22 @@ async function loadAsAdmin(
 
   // No claims is a real, ordinary state — not a missing person.
   const mine = details.filter((row) => row.participant_id === participantId);
+  const itemsCents = mine.reduce((sum, row) => sum + (row.amount_cents ?? 0), 0);
+  const tipCents =
+    tipShares.find((share) => share.participant_id === participantId)?.tip_share_cents ?? 0;
 
   return {
     billId: bill.id,
     name: person.name ?? '',
     currency: bill.currency,
-    totalCents: mine.reduce((sum, row) => sum + (row.amount_cents ?? 0), 0),
+    totalCents: itemsCents + tipCents,
     lines: mine.map((row) => ({
       id: row.bill_item_id ?? '',
       name: row.item_name ?? '',
       quantity: row.claimed_quantity ?? 0,
       amountCents: row.amount_cents ?? 0,
     })),
+    tipCents,
   };
 }
 

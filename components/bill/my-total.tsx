@@ -9,11 +9,17 @@ import type { BillItem } from '@/lib/types';
 type MyTotalProps = {
   totalCents: number;
   breakdown: { item: BillItem; shares: number; amountCents: number }[];
+  /**
+   * This person's flat slice of the tip, already folded into `totalCents`.
+   * Shown as its own line so the number above is never a mystery — the item
+   * lines plus this one add back up to exactly what is displayed.
+   */
+  tipCents?: number;
   currency?: string;
 };
 
-/** The current person's running total and what makes it up. */
-export function MyTotal({ totalCents, breakdown, currency }: MyTotalProps) {
+/** The current person's running total and what makes it up, tip included. */
+export function MyTotal({ totalCents, breakdown, tipCents, currency }: MyTotalProps) {
   const accent = useThemeColor({}, 'accent');
   const accentText = useThemeColor({}, 'accentText');
 
@@ -28,7 +34,7 @@ export function MyTotal({ totalCents, breakdown, currency }: MyTotalProps) {
         </ThemedText>
       </View>
 
-      {breakdown.length === 0 ? (
+      {breakdown.length === 0 && !tipCents ? (
         <ThemedText style={[styles.empty, { color: accentText }]}>
           Tap + on what you had.
         </ThemedText>
@@ -45,6 +51,17 @@ export function MyTotal({ totalCents, breakdown, currency }: MyTotalProps) {
               </ThemedText>
             </View>
           ))}
+
+          {Boolean(tipCents) && (
+            <View style={styles.line}>
+              <ThemedText style={[styles.lineName, { color: accentText }]} numberOfLines={1}>
+                Tip (split evenly)
+              </ThemedText>
+              <ThemedText style={[styles.lineAmount, { color: accentText }]}>
+                {formatCents(tipCents ?? 0, currency)}
+              </ThemedText>
+            </View>
+          )}
         </View>
       )}
     </View>

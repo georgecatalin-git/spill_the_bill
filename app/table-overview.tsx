@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BillTotals } from '@/components/bill/bill-totals';
+import { TipSplit } from '@/components/bill/tip-split';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Avatar } from '@/components/ui/avatar';
@@ -15,16 +16,21 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCents } from '@/lib/money';
-import { getActiveBill, getBillSummary } from '@/lib/services/bill-service';
+import { getBillSummary, getTableBill } from '@/lib/services/bill-service';
 import { getBillItems } from '@/lib/services/bill-item-service';
 import {
   getAdminParticipantId,
   getBillAssignmentSummary,
   getGuestClaims,
   getGuestTotals,
+  getTipShares,
 } from '@/lib/services/claim-service';
 import { getGuestTable } from '@/lib/services/guest-table-service';
-import { getBillClaimDetails, getBillParticipantTotals } from '@/lib/services/overview-service';
+import {
+  getBillClaimDetails,
+  getBillParticipantTotals,
+  getBillTipShares,
+} from '@/lib/services/overview-service';
 import { getTable, listParticipants } from '@/lib/services/table-service';
 import { useGuest } from '@/providers/guest-provider';
 
@@ -44,7 +50,15 @@ type ItemBreakdown = {
   claimants: Claimant[];
 };
 
+/**
+ * `totalCents` is what this person owes altogether: their item shares plus
+ * their flat slice of the tip. The same figure "Your Total" shows for the
+ * reader, so a name here and "You" elsewhere are never different numbers for
+ * the same person.
+ */
 type PersonTotal = { id: string; name: string; totalCents: number; isMe: boolean };
+
+type TipShareRow = { id: string; name: string; isMe: boolean; amountCents: number };
 
 type Overview = {
   /** Which bill this picture belongs to, so it can be watched for changes. */
@@ -56,6 +70,7 @@ type Overview = {
   remainingCents: number;
   people: PersonTotal[];
   items: ItemBreakdown[];
+  tipShares: TipShareRow[];
 };
 
 /** The parts that do not move while the bill does: fetched once, not on every event. */
@@ -246,6 +261,8 @@ export default function TableOverviewScreen() {
                 </View>
               </View>
 
+              <TipSplit shares={overview.tipShares} currency={overview.currency} />
+
               <View style={styles.section}>
                 <ThemedText type="label" style={styles.sectionLabel}>
                   Items · {overview.items.length}
@@ -374,13 +391,16 @@ async function adminContext(tableId: string | undefined): Promise<TableContext> 
 
 /** Guests go through their session-scoped functions. */
 async function loadAsGuest(sessionToken: string): Promise<Overview | null> {
-  const [items, totals, summary] = await Promise.all([
+  const [items, totals, summary, tipShares] = await Promise.all([
     getGuestClaims(sessionToken),
     getGuestTotals(sessionToken),
     getBillAssignmentSummary(sessionToken),
+    getTipShares(sessionToken),
   ]);
 
   if (!summary) return null;
+
+  const tipByPerson = new Map(tipShares.map((share) => [share.participant_id, share.tip_share_cents]));
 
   return {
     billId: summary.billId,
@@ -389,11 +409,19 @@ async function loadAsGuest(sessionToken: string): Promise<Overview | null> {
     totalCents: summary.billTotalCents,
     assignedCents: summary.assignedTotalCents,
     remainingCents: summary.remainingTotalCents,
+    // Items plus tip, so this list and "Your Total" never disagree about what
+    // the same person owes.
     people: totals.map((total) => ({
       id: total.participant_id,
       name: total.participant_name,
-      totalCents: total.total_cents,
+      totalCents: total.total_cents + (tipByPerson.get(total.participant_id) ?? 0),
       isMe: total.is_me,
+    })),
+    tipShares: tipShares.map((share) => ({
+      id: share.participant_id,
+      name: share.participant_name,
+      isMe: share.is_me,
+      amountCents: share.tip_share_cents,
     })),
     items: items.map((item) => ({
       id: item.id,
@@ -417,10 +445,12 @@ async function loadAsGuest(sessionToken: string): Promise<Overview | null> {
 async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null> {
   if (!tableId) return null;
 
-  const bill = await getActiveBill(tableId);
+  // Open or closed: a settled table still has figures worth reading, and the
+  // guests are still reading them.
+  const bill = await getTableBill(tableId);
   if (!bill) return null;
 
-  const [summary, totals, details, lines, everyone, meId] = await Promise.all([
+  const [summary, totals, details, lines, everyone, meId, tipShares] = await Promise.all([
     getBillSummary(bill.id),
     getBillParticipantTotals(bill.id),
     getBillClaimDetails(bill.id),
@@ -430,7 +460,10 @@ async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null
     getBillItems(bill.id),
     listParticipants(tableId),
     getAdminParticipantId(tableId),
+    getBillTipShares(bill.id),
   ]);
+
+  const tipByPerson = new Map(tipShares.map((share) => [share.participant_id, share.tip_share_cents]));
 
   const claimsByItem = new Map<string, Claimant[]>();
 
@@ -457,12 +490,22 @@ async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null
     assignedCents,
     remainingCents: bill.total_cents - assignedCents,
     // Everyone at the table, including anyone still on zero — the guest view
-    // shows them too, and a missing name reads as a bug.
-    people: everyone.map((person) => ({
-      id: person.id ?? '',
-      name: person.name ?? '',
-      totalCents: totals.find((total) => total.participant_id === person.id)?.total_cents ?? 0,
-      isMe: Boolean(meId) && person.id === meId,
+    // shows them too, and a missing name reads as a bug. Items plus tip, same
+    // as the guest side, so the two never disagree.
+    people: everyone.map((person) => {
+      const itemsCents = totals.find((total) => total.participant_id === person.id)?.total_cents ?? 0;
+      return {
+        id: person.id ?? '',
+        name: person.name ?? '',
+        totalCents: itemsCents + (tipByPerson.get(person.id ?? '') ?? 0),
+        isMe: Boolean(meId) && person.id === meId,
+      };
+    }),
+    tipShares: tipShares.map((share) => ({
+      id: share.participant_id ?? '',
+      name: share.name ?? '',
+      isMe: share.participant_id === meId,
+      amountCents: share.tip_share_cents ?? 0,
     })),
     items: lines.map((line) => {
       const claimants = claimsByItem.get(line.id) ?? [];

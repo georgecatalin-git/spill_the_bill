@@ -1,4 +1,4 @@
-import type { BillClaimDetail, BillParticipantTotal } from '@/lib/database';
+import type { BillClaimDetail, BillParticipantTotal, BillTipShareRow } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -37,5 +37,22 @@ export async function getBillParticipantTotals(billId: string): Promise<BillPart
     .eq('bill_id', billId);
 
   if (error) throw toFriendlyError(error, 'Could not load the totals.');
+  return data ?? [];
+}
+
+/**
+ * Everyone's flat share of the tip, read through the admin's own RLS.
+ *
+ * The list only ever holds participants who are currently active at the
+ * table — someone who left is not still owed a slice of tonight's tip.
+ */
+export async function getBillTipShares(billId: string): Promise<BillTipShareRow[]> {
+  const { data, error } = await supabase
+    .from('bill_tip_shares')
+    .select()
+    .eq('bill_id', billId)
+    .order('name');
+
+  if (error) throw toFriendlyError(error, 'Could not load the tip split.');
   return data ?? [];
 }

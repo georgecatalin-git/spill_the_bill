@@ -26,6 +26,7 @@ export type BillParticipantTotal = Tables<'bill_participant_totals'>;
 export type BillSummary = Tables<'bill_summaries'>;
 export type AdminTableSummary = Tables<'admin_table_summaries'>;
 export type BillClaimDetail = Tables<'bill_claim_details'>;
+export type BillTipShareRow = Tables<'bill_tip_shares'>;
 
 export type TableStatus =
   | 'WAITING_FOR_GUESTS'

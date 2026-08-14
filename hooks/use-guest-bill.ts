@@ -6,10 +6,12 @@ import {
   getBillAssignmentSummary,
   getGuestClaims,
   getGuestTotals,
+  getTipShares,
   updateClaimQuantity,
   type BillAssignmentSummary,
   type ClaimedBillItem,
   type ParticipantTotal,
+  type TipShare,
 } from '@/lib/services/claim-service';
 import type { BillItem, ClaimMap, Participant } from '@/lib/types';
 
@@ -24,6 +26,7 @@ export function useGuestBill(sessionToken: string | undefined) {
   const [items, setItems] = useState<ClaimedBillItem[]>([]);
   const [totals, setTotals] = useState<ParticipantTotal[]>([]);
   const [summary, setSummary] = useState<BillAssignmentSummary | null>(null);
+  const [tipShares, setTipShares] = useState<TipShare[]>([]);
   const [loading, setLoading] = useState(Boolean(sessionToken));
   const [error, setError] = useState<string | null>(null);
 
@@ -37,16 +40,18 @@ export function useGuestBill(sessionToken: string | undefined) {
     if (!keepError) setError(null);
 
     try {
-      // Three calls for the whole bill, not one per item.
-      const [loadedItems, loadedTotals, loadedSummary] = await Promise.all([
+      // Four calls for the whole bill, not one per item.
+      const [loadedItems, loadedTotals, loadedSummary, loadedTipShares] = await Promise.all([
         getGuestClaims(sessionToken),
         getGuestTotals(sessionToken),
         getBillAssignmentSummary(sessionToken),
+        getTipShares(sessionToken),
       ]);
 
       setItems(loadedItems);
       setTotals(loadedTotals);
       setSummary(loadedSummary);
+      setTipShares(loadedTipShares);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load the bill.');
     } finally {
@@ -139,15 +144,21 @@ export function useGuestBill(sessionToken: string | undefined) {
   }, [items, totals]);
 
   const me = totals.find((total) => total.is_me);
+  const myTip = tipShares.find((share) => share.is_me);
+  const myTipCents = myTip?.tip_share_cents ?? 0;
 
   return {
     items,
     totals,
     summary,
+    tipShares,
     loading,
     error,
     connectionStatus,
-    myTotalCents: me?.total_cents ?? 0,
+    // Items plus this person's flat slice of the tip — the amount they
+    // actually owe, not just what they claimed off the receipt.
+    myTotalCents: (me?.total_cents ?? 0) + myTipCents,
+    myTipCents,
     myParticipantId: me?.participant_id ?? '',
     ...view,
     reload: () => load(),

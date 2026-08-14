@@ -396,6 +396,24 @@ export type Database = {
           },
         ];
       };
+      bill_tip_shares: {
+        Row: {
+          bill_id: string | null;
+          participant_id: string | null;
+          name: string | null;
+          active_count: number | null;
+          tip_share_cents: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'bills_table_id_fkey';
+            columns: ['bill_id'];
+            isOneToOne: false;
+            referencedRelation: 'bills';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Functions: {
       // Guest invitation and session functions. Guests reach these as `anon`;
@@ -506,6 +524,15 @@ export type Database = {
           participant_name: string;
           is_me: boolean;
           total_cents: number;
+        }[];
+      };
+      get_guest_tip_shares: {
+        Args: { p_session_token: string };
+        Returns: {
+          participant_id: string;
+          participant_name: string;
+          is_me: boolean;
+          tip_share_cents: number;
         }[];
       };
       get_bill_assignment_summary: {

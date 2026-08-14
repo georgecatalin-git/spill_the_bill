@@ -59,6 +59,8 @@ app/                     screens (expo-router)
   join/[code].tsx        guest entry from an invitation link
 hooks/
   use-realtime-bill.ts   the only Supabase Realtime subscription
+supabase/functions/
+  parse-receipt/         reads a receipt photo; holds the Anthropic key
 lib/
   money.ts               cents, formatting, largest-remainder split
   split.ts               display-side helpers for the receipt rows
@@ -82,6 +84,7 @@ Migrations are the source of truth and are applied in order:
 | `20260813180000_bill_management` | tax, service, tip, confirmed total, dashboard view |
 | `20260813210000_item_claims` | claiming, availability, admin claims |
 | `20260814000000_realtime_sync` | change broadcasts for bills and tables |
+| `20260814120000_freeze_completed_bills` | a closed bill stops accepting changes |
 
 Regenerate types after any schema change:
 
@@ -89,12 +92,23 @@ Regenerate types after any schema change:
 npx supabase gen types typescript --project-id <project-id> > lib/database/types.ts
 ```
 
-Two Postgres traps this project has already been bitten by, worth remembering:
+Three Postgres traps this project has already been bitten by, worth
+remembering:
 
 - A column-level `REVOKE` does nothing while the role still holds a table-wide
   `SELECT`. Revoke the table privilege, then grant the safe columns back.
 - `EXECUTE` is granted to `PUBLIC` by default. Revoking from `anon` and
   `authenticated` alone leaves the inherited grant in place.
+- A trigger function is **not** `SECURITY DEFINER` unless it says so, and a
+  plain one runs as the caller. A guard trigger that calls a revoked helper
+  therefore fails on *every* write rather than only the ones it means to
+  refuse — and the error it raises is `permission denied for function …`,
+  which reads nothing like the rule being enforced.
+
+Closed bills are frozen in the database, not only in the UI: `bill_items`,
+`bills` and claim deletion all refuse once a bill is `COMPLETED`. A
+`FULLY_ASSIGNED` bill deliberately still lets a guest lower or clear their own
+claim, otherwise they are stranded on a bill they cannot change.
 
 ## Running it
 
@@ -140,11 +154,40 @@ project that has never opened a Realtime connection there are none, and
 `realtime.send` swallows the failure as a `WARNING` — every broadcast silently
 vanishes. One client connection creates them.
 
+## Reading receipts
+
+A photo of the receipt becomes bill lines through Claude's vision, and the key
+that pays for it never touches the device.
+
+Anything in the Expo bundle is extractable — an `EXPO_PUBLIC_` variable ships to
+the phone in plain text — so the Anthropic key lives as a Supabase secret and
+the call happens in the `parse-receipt` Edge Function. The app sends a photo and
+gets lines back; only the function can talk to Anthropic. The function also
+demands a real signed-in user, because `verify_jwt` alone would accept the
+publishable key and let anyone spend the budget.
+
+The reply shape is enforced by the API rather than hoped for: `output_config`
+carries a JSON schema, so the model cannot return prose or a field we do not
+expect. Numeric bounds are checked in code, since structured outputs reject
+`minimum` in a schema.
+
+Photos are resized to 2576 pixels on the long edge before upload — exactly
+Claude's high-resolution limit. Larger buys nothing (the API downsamples);
+smaller starts losing small print.
+
+Receipts print line totals, the app stores unit prices. The model divides, and
+a line total that does not divide evenly cannot be represented exactly — the
+review screen shows the receipt's own total beside the sum of the lines so the
+admin can see any gap, and `confirmed_total_cents` is where it settles.
+
+`lib/receipt/mock-parser.ts` is still in the tree, returning four invented
+lines. Swap it back into `lib/receipt/index.ts` only to work on the review
+screens without spending API calls, and never leave it there — an earlier mock
+layer caused a real bug where the app preferred invented data over the user's.
+
 ## Not built yet
 
-OCR, payments, and https universal links. The receipt parser is a
-stand-in behind a `ReceiptParser` contract — swapping in real OCR is one line
-in `lib/receipt/index.ts`.
+Payments and https universal links.
 
 Invitation links currently use the app's own scheme, which is not clickable in
 messaging apps and does nothing for someone without the app installed. Making

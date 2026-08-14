@@ -10,6 +10,7 @@ import { EditableItemRow } from '@/components/bill/editable-item-row';
 import { ItemFormModal } from '@/components/bill/item-form-modal';
 import { MyTotal } from '@/components/bill/my-total';
 import { ReceiptItemRow } from '@/components/bill/receipt-item-row';
+import { TipSplit } from '@/components/bill/tip-split';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -151,6 +152,17 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
                 shares: item.my_quantity,
                 amountCents: item.my_amount_cents,
               }))}
+            tipCents={bill.myTipCents}
+            currency={currency}
+          />
+
+          <TipSplit
+            shares={bill.tipShares.map((share) => ({
+              id: share.participant_id,
+              name: share.participant_name,
+              isMe: share.is_me,
+              amountCents: share.tip_share_cents,
+            }))}
             currency={currency}
           />
 
@@ -270,19 +282,37 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
             />
           )}
 
-          <View style={styles.actions}>
-            <Button label="Add Item" onPress={() => setAddVisible(true)} />
-            <Button
-              label="Scan Receipt"
-              variant="secondary"
-              onPress={() => router.push({ pathname: '/scan-receipt', params: { tableId } })}
-            />
-          </View>
+          {/* A settled bill is a record, not a working document. Until this
+              screen resolved the closed bill the admin never landed here, so
+              nothing stopped them editing it. */}
+          {!completed && (
+            <View style={styles.actions}>
+              <Button label="Add Item" onPress={() => setAddVisible(true)} />
+              <Button
+                label="Scan Receipt"
+                variant="secondary"
+                onPress={() => router.push({ pathname: '/scan-receipt', params: { tableId } })}
+              />
+            </View>
+          )}
 
           {!draft && (
             <MyTotal
               totalCents={bill.myTotalCents}
               breakdown={bill.myBreakdown}
+              tipCents={bill.myTipCents}
+              currency={currency}
+            />
+          )}
+
+          {!draft && (
+            <TipSplit
+              shares={bill.tipShares.map((share) => ({
+                id: share.participant_id ?? '',
+                name: share.name ?? '',
+                isMe: share.participant_id === bill.myParticipantId,
+                amountCents: share.tip_share_cents ?? 0,
+              }))}
               currency={currency}
             />
           )}
@@ -299,11 +329,13 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
             />
           )}
 
-          <Button
-            label="Edit tax, service & tip"
-            variant="secondary"
-            onPress={() => setTotalsVisible(true)}
-          />
+          {!completed && (
+            <Button
+              label="Edit tax, service & tip"
+              variant="secondary"
+              onPress={() => setTotalsVisible(true)}
+            />
+          )}
 
           <Button
             label="See everyone"

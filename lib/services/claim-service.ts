@@ -52,6 +52,19 @@ export type BillAssignmentSummary = {
   percentageAssigned: number;
 };
 
+/**
+ * One person's flat slice of the tip.
+ *
+ * Unlike item shares, which are proportional to what someone claimed, this is
+ * the same amount for everyone — the tip split by headcount, not by order.
+ */
+export type TipShare = {
+  participant_id: string;
+  participant_name: string;
+  is_me: boolean;
+  tip_share_cents: number;
+};
+
 function messageOf(error: unknown) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error) {
@@ -131,6 +144,16 @@ export async function getBillAssignmentSummary(
     remainingTotalCents: Number(row.remaining_total_cents),
     percentageAssigned: Number(row.percentage_assigned),
   };
+}
+
+/** Everyone's flat share of the tip — same list shape as `getGuestTotals`. */
+export async function getTipShares(sessionToken: string): Promise<TipShare[]> {
+  const { data, error } = await supabase.rpc('get_guest_tip_shares', {
+    p_session_token: sessionToken,
+  });
+
+  if (error) throw toClaimError(error, 'Unable to load the tip.');
+  return (data ?? []) as unknown as TipShare[];
 }
 
 /** Takes one more of an item. The server refuses if none are left. */
