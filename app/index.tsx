@@ -44,7 +44,7 @@ export default function WelcomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
           <ThemedText type="title" style={styles.title}>
-            Split
+            Split.
           </ThemedText>
           <ThemedText type="secondary" style={styles.subtitle}>
             Split the bill, simply.

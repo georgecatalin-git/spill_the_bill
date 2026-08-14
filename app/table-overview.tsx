@@ -253,6 +253,10 @@ export default function TableOverviewScreen() {
                   totalCents={overview.totalCents}
                   assignedCents={overview.assignedCents}
                   remainingCents={overview.remainingCents}
+                  // The tip shares already sum to the bill's tip, so naming
+                  // the remainder costs no extra read.
+                  tipCents={overview.tipShares.reduce((sum, s) => sum + s.amountCents, 0)}
+                  fullyAssigned={settled}
                   currency={overview.currency}
                 />
 
@@ -260,13 +264,11 @@ export default function TableOverviewScreen() {
                     is not something everyone can read. */}
                 {settled && (
                   <ThemedText type="secondary" style={[styles.settled, { color: success }]}>
+                    {/* The figure above names what is left, so repeating it
+                        here would only add a second, vaguer version of it. */}
                     {overview.splitEvenly
                       ? 'The whole bill is divided evenly. Nothing left to claim.'
-                      : `Every item has been claimed.${
-                          overview.remainingCents > 0
-                            ? ' What is left is tax, service and tip, which nobody picks off the receipt.'
-                            : ''
-                        }`}
+                      : 'Every item has been claimed.'}
                   </ThemedText>
                 )}
               </View>

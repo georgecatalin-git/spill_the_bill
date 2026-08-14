@@ -9,14 +9,38 @@ type BillTotalsProps = {
   totalCents: number;
   assignedCents: number;
   remainingCents: number;
+  /**
+   * The tip, so the remainder can say what it actually is. Once every item is
+   * claimed, "Remaining" is not money anyone still has to pick off the
+   * receipt — it is the tip and any tax, which reads as an unexplained debt
+   * unless it is named.
+   */
+  tipCents?: number;
+  /** Whether every item has been claimed, which is what changes the meaning. */
+  fullyAssigned?: boolean;
   currency?: string;
 };
+
+/**
+ * Names the leftover honestly.
+ *
+ * Only claims the remainder is the tip when the numbers actually say so —
+ * calling tax "Tip remaining" would trade one confusing label for a wrong one.
+ */
+function remainingLabel(remainingCents: number, tipCents: number, fullyAssigned: boolean) {
+  if (!fullyAssigned || remainingCents <= 0) return 'Remaining';
+  if (tipCents <= 0) return 'Tax remaining';
+
+  return remainingCents === tipCents ? 'Tip remaining' : 'Tax & tip remaining';
+}
 
 /** Bill total, and how much of it is spoken for. */
 export function BillTotals({
   totalCents,
   assignedCents,
   remainingCents,
+  tipCents = 0,
+  fullyAssigned = false,
   currency,
 }: BillTotalsProps) {
   const surface = useThemeColor({}, 'surface');
@@ -47,7 +71,7 @@ export function BillTotals({
 
         <View style={[styles.column, styles.columnRight]}>
           <ThemedText type="secondary" style={styles.columnLabel}>
-            Remaining
+            {remainingLabel(remainingCents, tipCents, fullyAssigned)}
           </ThemedText>
           <ThemedText style={[styles.columnValue, { color: settled ? success : warning }]}>
             {formatCents(remainingCents, currency)}

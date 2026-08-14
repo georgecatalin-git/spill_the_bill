@@ -121,6 +121,8 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
               totalCents={bill.summary.billTotalCents}
               assignedCents={bill.summary.assignedTotalCents}
               remainingCents={bill.summary.remainingTotalCents}
+              tipCents={bill.tipShares.reduce((sum, share) => sum + share.tip_share_cents, 0)}
+              fullyAssigned={bill.summary.status === 'FULLY_ASSIGNED'}
               currency={currency}
             />
           )}
