@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { parseReceipt, type ParsedReceipt } from '@/lib/receipt';
+import { ReceiptError } from '@/lib/receipt/claude-parser';
 
 export type ReceiptScanState =
   | { status: 'loading' }
   | { status: 'ready'; receipt: ParsedReceipt }
-  | { status: 'error' };
+  /** Written for the admin to read: why it failed decides what they do next. */
+  | { status: 'error'; message: string };
+
+const GENERIC_ERROR = "We couldn't read this receipt.";
 
 /**
  * Reads a receipt photo through the configured parser.
@@ -19,7 +23,7 @@ export function useReceiptScan(imageUri: string | undefined) {
 
   useEffect(() => {
     if (!imageUri) {
-      setState({ status: 'error' });
+      setState({ status: 'error', message: 'There is no photo to read.' });
       return;
     }
 
@@ -30,8 +34,15 @@ export function useReceiptScan(imageUri: string | undefined) {
       .then((receipt) => {
         if (!cancelled) setState({ status: 'ready', receipt });
       })
-      .catch(() => {
-        if (!cancelled) setState({ status: 'error' });
+      .catch((caught) => {
+        if (cancelled) return;
+
+        // Only messages the parser wrote for people are shown. Anything else —
+        // a native image error, an unexpected throw — could carry internals.
+        setState({
+          status: 'error',
+          message: caught instanceof ReceiptError ? caught.message : GENERIC_ERROR,
+        });
       });
 
     return () => {

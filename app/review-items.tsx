@@ -104,7 +104,7 @@ export default function ReviewItemsScreen() {
         <SafeAreaView style={styles.errorArea} edges={['bottom']}>
           <ScreenHeader title="Review Items" />
           <EmptyState
-            message="We couldn't read this receipt."
+            message={state.message}
             hint="Try again, or go back and take a clearer photo."
           />
           <Button label="Try again" variant="secondary" onPress={retry} />

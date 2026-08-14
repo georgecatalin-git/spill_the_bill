@@ -1,16 +1,18 @@
 import { createBillItem } from '@/lib/bill';
 import { toCents } from '@/lib/money';
-import { mockReceiptParser } from '@/lib/receipt/mock-parser';
+import { claudeReceiptParser } from '@/lib/receipt/claude-parser';
 import type { ParsedReceipt, ReceiptParser } from '@/lib/receipt/types';
 import type { BillItem } from '@/lib/types';
 
 /**
  * The parser the app runs with.
  *
- * This is the single line to change when the real OCR/AI service is ready:
- * point it at the new implementation and nothing else has to move.
+ * Reads the photo through the `parse-receipt` Edge Function, which is where the
+ * Anthropic key lives. `mock-parser.ts` is still in the tree and still returns
+ * the same four invented lines — swap it back in here only to work on the
+ * review screens without spending API calls, and never leave it in.
  */
-const parser: ReceiptParser = mockReceiptParser;
+const parser: ReceiptParser = claudeReceiptParser;
 
 /** Reads a receipt photo. The UI only ever calls this, never a parser directly. */
 export function parseReceipt(imageUri: string) {
