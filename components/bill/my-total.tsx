@@ -15,11 +15,22 @@ type MyTotalProps = {
    * lines plus this one add back up to exactly what is displayed.
    */
   tipCents?: number;
+  /**
+   * On an evenly split bill the share already covers everything, so there is
+   * no per-item breakdown to show and nothing for the reader to tick.
+   */
+  evenSplit?: boolean;
   currency?: string;
 };
 
 /** The current person's running total and what makes it up, tip included. */
-export function MyTotal({ totalCents, breakdown, tipCents, currency }: MyTotalProps) {
+export function MyTotal({
+  totalCents,
+  breakdown,
+  tipCents,
+  evenSplit,
+  currency,
+}: MyTotalProps) {
   const accent = useThemeColor({}, 'accent');
   const accentText = useThemeColor({}, 'accentText');
 
@@ -34,7 +45,11 @@ export function MyTotal({ totalCents, breakdown, tipCents, currency }: MyTotalPr
         </ThemedText>
       </View>
 
-      {breakdown.length === 0 && !tipCents ? (
+      {evenSplit ? (
+        <ThemedText style={[styles.empty, { color: accentText }]}>
+          An equal share of the whole bill.
+        </ThemedText>
+      ) : breakdown.length === 0 && !tipCents ? (
         <ThemedText style={[styles.empty, { color: accentText }]}>
           Tap + on what you had.
         </ThemedText>

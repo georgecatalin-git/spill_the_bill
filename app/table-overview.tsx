@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BillTotals } from '@/components/bill/bill-totals';
+import { EvenSplit } from '@/components/bill/even-split';
 import { TipSplit } from '@/components/bill/tip-split';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -22,16 +23,23 @@ import {
   getAdminParticipantId,
   getBillAssignmentSummary,
   getGuestClaims,
+  getGuestEvenShares,
+  getGuestSettlements,
   getGuestTotals,
   getTipShares,
 } from '@/lib/services/claim-service';
 import { getGuestTable } from '@/lib/services/guest-table-service';
 import {
   getBillClaimDetails,
+  getBillEvenShares,
   getBillParticipantTotals,
   getBillTipShares,
 } from '@/lib/services/overview-service';
-import { getTable, listParticipants } from '@/lib/services/table-service';
+import {
+  getTable,
+  listParticipants,
+  setParticipantSettled,
+} from '@/lib/services/table-service';
 import { useGuest } from '@/providers/guest-provider';
 
 /** One person's hold on one receipt line, with the amount the server worked out. */
@@ -56,9 +64,17 @@ type ItemBreakdown = {
  * reader, so a name here and "You" elsewhere are never different numbers for
  * the same person.
  */
-type PersonTotal = { id: string; name: string; totalCents: number; isMe: boolean };
+type PersonTotal = {
+  id: string;
+  name: string;
+  totalCents: number;
+  isMe: boolean;
+  /** Whether the admin has confirmed this person handed their money over. */
+  settled: boolean;
+};
 
 type TipShareRow = { id: string; name: string; isMe: boolean; amountCents: number };
+type EvenShareRow = { id: string; name: string; isMe: boolean; amountCents: number };
 
 type Overview = {
   /** Which bill this picture belongs to, so it can be watched for changes. */
@@ -71,6 +87,9 @@ type Overview = {
   people: PersonTotal[];
   items: ItemBreakdown[];
   tipShares: TipShareRow[];
+  /** Non-empty only when the bill is split evenly; then it replaces the rest. */
+  evenShares: EvenShareRow[];
+  splitEvenly: boolean;
 };
 
 /** The parts that do not move while the bill does: fetched once, not on every event. */
@@ -90,6 +109,8 @@ export default function TableOverviewScreen() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Which person's payment is being recorded, so their button can't be double-tapped. */
+  const [settling, setSettling] = useState<string | null>(null);
 
   // The table name and which participant this device is do not change while
   // people claim things, so they are read once rather than on every event.
@@ -133,6 +154,28 @@ export default function TableOverviewScreen() {
   // reading it are watching the one topic, and each re-reads through their own
   // authorised path.
   const { connectionStatus } = useRealtimeBill(overview?.billId, load);
+
+  /**
+   * Records a payment, then reloads from the server rather than flipping the
+   * row locally — the database stays the one that says who has paid, and
+   * everyone else's screen hears about it on the same channel.
+   */
+  const toggleSettled = useCallback(
+    async (participantId: string, currentlySettled: boolean) => {
+      setSettling(participantId);
+      setError(null);
+
+      try {
+        await setParticipantSettled(participantId, !currentlySettled);
+        await load();
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Could not record that payment.');
+      } finally {
+        setSettling(null);
+      }
+    },
+    [load]
+  );
 
   // Biggest share first, so "who owes most" reads off the top. Sorting is
   // stable, so people on the same amount keep their joining order instead of
@@ -217,10 +260,13 @@ export default function TableOverviewScreen() {
                     is not something everyone can read. */}
                 {settled && (
                   <ThemedText type="secondary" style={[styles.settled, { color: success }]}>
-                    Every item has been claimed.
-                    {overview.remainingCents > 0
-                      ? ` What is left is tax, service and tip, which nobody picks off the receipt.`
-                      : ''}
+                    {overview.splitEvenly
+                      ? 'The whole bill is divided evenly. Nothing left to claim.'
+                      : `Every item has been claimed.${
+                          overview.remainingCents > 0
+                            ? ' What is left is tax, service and tip, which nobody picks off the receipt.'
+                            : ''
+                        }`}
                   </ThemedText>
                 )}
               </View>
@@ -232,34 +278,80 @@ export default function TableOverviewScreen() {
 
                 <View>
                   {people.map((person, index) => (
-                    <Pressable
+                    <View
                       key={person.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${person.name}${person.isMe ? ', you' : ''}, ${formatCents(person.totalCents, overview.currency)}. See what they claimed.`}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/participant/[id]',
-                          params: { id: person.id, tableId },
-                        })
-                      }
-                      style={({ pressed }) => [
+                      style={[
                         styles.personRow,
                         index > 0 && styles.divider,
                         index > 0 && { borderTopColor: border },
-                        pressed && styles.pressed,
                       ]}>
-                      <Avatar name={person.name} size={36} />
-                      <ThemedText style={styles.personName} numberOfLines={1}>
-                        {person.name}
-                        {person.isMe ? ' (You)' : ''}
-                      </ThemedText>
-                      <ThemedText style={styles.amount}>
-                        {formatCents(person.totalCents, overview.currency)}
-                      </ThemedText>
-                    </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${person.name}${person.isMe ? ', you' : ''}, ${formatCents(person.totalCents, overview.currency)}${person.settled ? ', paid' : ''}. See what they claimed.`}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/participant/[id]',
+                            params: { id: person.id, tableId },
+                          })
+                        }
+                        style={({ pressed }) => [styles.personMain, pressed && styles.pressed]}>
+                        <Avatar name={person.name} size={36} />
+                        <ThemedText style={styles.personName} numberOfLines={1}>
+                          {person.name}
+                          {person.isMe ? ' (You)' : ''}
+                        </ThemedText>
+                        <ThemedText
+                          style={[
+                            styles.amount,
+                            // A settled amount is history, not something owed.
+                            person.settled && { color: success, textDecorationLine: 'line-through' },
+                          ]}>
+                          {formatCents(person.totalCents, overview.currency)}
+                        </ThemedText>
+                      </Pressable>
+
+                      {isAdmin ? (
+                        <Pressable
+                          accessibilityRole="checkbox"
+                          accessibilityState={{ checked: person.settled }}
+                          accessibilityLabel={
+                            person.settled
+                              ? `Mark ${person.name} as not paid`
+                              : `Mark ${person.name} as paid`
+                          }
+                          disabled={settling === person.id}
+                          onPress={() => toggleSettled(person.id, person.settled)}
+                          style={({ pressed }) => [
+                            styles.settleButton,
+                            {
+                              borderColor: person.settled ? success : border,
+                              backgroundColor: person.settled ? success : 'transparent',
+                            },
+                            pressed && styles.pressed,
+                          ]}>
+                          <ThemedText
+                            style={[
+                              styles.settleMark,
+                              { color: person.settled ? accentText : border },
+                            ]}>
+                            ✓
+                          </ThemedText>
+                        </Pressable>
+                      ) : (
+                        // Guests see the state but cannot change it — only the
+                        // person the money reaches gets to say it arrived.
+                        person.settled && (
+                          <ThemedText type="secondary" style={[styles.paidLabel, { color: success }]}>
+                            Paid
+                          </ThemedText>
+                        )
+                      )}
+                    </View>
                   ))}
                 </View>
               </View>
+
+              <EvenSplit shares={overview.evenShares} currency={overview.currency} />
 
               <TipSplit shares={overview.tipShares} currency={overview.currency} />
 
@@ -291,9 +383,13 @@ export default function TableOverviewScreen() {
                           </ThemedText>
                         </View>
 
-                        <ThemedText type="secondary" style={styles.availability}>
-                          {availabilityLabel(item, overview.currency)}
-                        </ThemedText>
+                        {/* Claim counts mean nothing on an evenly split bill —
+                            the receipt is there to be read, not ticked. */}
+                        {!overview.splitEvenly && (
+                          <ThemedText type="secondary" style={styles.availability}>
+                            {availabilityLabel(item, overview.currency)}
+                          </ThemedText>
+                        )}
 
                         {item.claimants.length > 0 && (
                           <View style={styles.claimList}>
@@ -391,16 +487,24 @@ async function adminContext(tableId: string | undefined): Promise<TableContext> 
 
 /** Guests go through their session-scoped functions. */
 async function loadAsGuest(sessionToken: string): Promise<Overview | null> {
-  const [items, totals, summary, tipShares] = await Promise.all([
+  const [items, totals, summary, tipShares, settlements, evenShares] = await Promise.all([
     getGuestClaims(sessionToken),
     getGuestTotals(sessionToken),
     getBillAssignmentSummary(sessionToken),
     getTipShares(sessionToken),
+    getGuestSettlements(sessionToken),
+    getGuestEvenShares(sessionToken),
   ]);
 
   if (!summary) return null;
 
   const tipByPerson = new Map(tipShares.map((share) => [share.participant_id, share.tip_share_cents]));
+  const settledByPerson = new Map(settlements.map((row) => [row.participant_id, row.settled]));
+
+  // An even share already covers items, tax, service and tip, so it replaces
+  // the per-item figure rather than being added to it.
+  const evenByPerson = new Map(evenShares.map((share) => [share.participant_id, share.share_cents]));
+  const splitEvenly = evenShares.length > 0;
 
   return {
     billId: summary.billId,
@@ -409,20 +513,32 @@ async function loadAsGuest(sessionToken: string): Promise<Overview | null> {
     totalCents: summary.billTotalCents,
     assignedCents: summary.assignedTotalCents,
     remainingCents: summary.remainingTotalCents,
-    // Items plus tip, so this list and "Your Total" never disagree about what
-    // the same person owes.
+    // Whatever the mode, this list and "Your Total" must never disagree about
+    // what the same person owes.
     people: totals.map((total) => ({
       id: total.participant_id,
       name: total.participant_name,
-      totalCents: total.total_cents + (tipByPerson.get(total.participant_id) ?? 0),
+      totalCents: splitEvenly
+        ? (evenByPerson.get(total.participant_id) ?? 0)
+        : total.total_cents + (tipByPerson.get(total.participant_id) ?? 0),
       isMe: total.is_me,
+      settled: settledByPerson.get(total.participant_id) ?? false,
     })),
-    tipShares: tipShares.map((share) => ({
+    tipShares: splitEvenly
+      ? []
+      : tipShares.map((share) => ({
+          id: share.participant_id,
+          name: share.participant_name,
+          isMe: share.is_me,
+          amountCents: share.tip_share_cents,
+        })),
+    evenShares: evenShares.map((share) => ({
       id: share.participant_id,
       name: share.participant_name,
       isMe: share.is_me,
-      amountCents: share.tip_share_cents,
+      amountCents: share.share_cents,
     })),
+    splitEvenly,
     items: items.map((item) => ({
       id: item.id,
       name: item.name,
@@ -450,20 +566,24 @@ async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null
   const bill = await getTableBill(tableId);
   if (!bill) return null;
 
-  const [summary, totals, details, lines, everyone, meId, tipShares] = await Promise.all([
-    getBillSummary(bill.id),
-    getBillParticipantTotals(bill.id),
-    getBillClaimDetails(bill.id),
-    // `bill_claim_details` only holds lines somebody claimed. The receipt is
-    // read separately so an untouched item still appears, which is exactly the
-    // thing a guest needs to see.
-    getBillItems(bill.id),
-    listParticipants(tableId),
-    getAdminParticipantId(tableId),
-    getBillTipShares(bill.id),
-  ]);
+  const [summary, totals, details, lines, everyone, meId, tipShares, evenShares] =
+    await Promise.all([
+      getBillSummary(bill.id),
+      getBillParticipantTotals(bill.id),
+      getBillClaimDetails(bill.id),
+      // `bill_claim_details` only holds lines somebody claimed. The receipt is
+      // read separately so an untouched item still appears, which is exactly the
+      // thing a guest needs to see.
+      getBillItems(bill.id),
+      listParticipants(tableId),
+      getAdminParticipantId(tableId),
+      getBillTipShares(bill.id),
+      getBillEvenShares(bill.id),
+    ]);
 
   const tipByPerson = new Map(tipShares.map((share) => [share.participant_id, share.tip_share_cents]));
+  const evenByPerson = new Map(evenShares.map((share) => [share.participant_id, share.share_cents]));
+  const splitEvenly = bill.split_mode === 'EVENLY';
 
   const claimsByItem = new Map<string, Claimant[]>();
 
@@ -497,11 +617,21 @@ async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null
       return {
         id: person.id ?? '',
         name: person.name ?? '',
-        totalCents: itemsCents + (tipByPerson.get(person.id ?? '') ?? 0),
+        totalCents: splitEvenly
+          ? (evenByPerson.get(person.id ?? '') ?? 0)
+          : itemsCents + (tipByPerson.get(person.id ?? '') ?? 0),
         isMe: Boolean(meId) && person.id === meId,
+        settled: person.settled_at !== null,
       };
     }),
-    tipShares: tipShares.map((share) => ({
+    evenShares: evenShares.map((share) => ({
+      id: share.participant_id ?? '',
+      name: share.name ?? '',
+      isMe: share.participant_id === meId,
+      amountCents: share.share_cents ?? 0,
+    })),
+    splitEvenly,
+    tipShares: (splitEvenly ? [] : tipShares).map((share) => ({
       id: share.participant_id ?? '',
       name: share.name ?? '',
       isMe: share.participant_id === meId,
@@ -566,9 +696,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+  },
+  personMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
     paddingVertical: Spacing.sm,
   },
   personName: { flex: 1, fontWeight: '500' },
+  settleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settleMark: { fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  paidLabel: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
   itemName: { fontWeight: '500' },
   amount: { fontWeight: '600', fontVariant: ['tabular-nums'] },
   itemList: { gap: Spacing.md },

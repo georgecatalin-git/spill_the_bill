@@ -84,6 +84,8 @@ export type Database = {
           name: string;
           session_token: string | null;
           table_id: string;
+          settled_at: string | null;
+          settled_by: string | null;
         };
         Insert: {
           id?: string;
@@ -94,6 +96,8 @@ export type Database = {
           name: string;
           session_token?: string | null;
           table_id: string;
+          settled_at?: string | null;
+          settled_by?: string | null;
         };
         Update: {
           id?: string;
@@ -104,6 +108,8 @@ export type Database = {
           name?: string;
           session_token?: string | null;
           table_id?: string;
+          settled_at?: string | null;
+          settled_by?: string | null;
         };
         Relationships: [
           {
@@ -122,6 +128,8 @@ export type Database = {
           created_at: string;
           currency: string;
           id: string;
+          receipt_path: string | null;
+          split_mode: 'BY_ITEM' | 'EVENLY';
           service_charge_cents: number;
           status: string;
           subtotal_cents: number;
@@ -133,6 +141,8 @@ export type Database = {
         };
         Insert: {
           confirmed_total_cents?: number | null;
+          receipt_path?: string | null;
+          split_mode?: 'BY_ITEM' | 'EVENLY';
           completed_at?: string | null;
           created_at?: string;
           currency?: string;
@@ -148,6 +158,8 @@ export type Database = {
         };
         Update: {
           confirmed_total_cents?: number | null;
+          receipt_path?: string | null;
+          split_mode?: 'BY_ITEM' | 'EVENLY';
           completed_at?: string | null;
           created_at?: string;
           currency?: string;
@@ -265,6 +277,8 @@ export type Database = {
           last_seen_at: string | null;
           name: string | null;
           table_id: string | null;
+          settled_at: string | null;
+          settled_by: string | null;
         };
         Relationships: [
           {
@@ -392,6 +406,24 @@ export type Database = {
             columns: ['table_id'];
             isOneToOne: false;
             referencedRelation: 'tables';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      bill_even_shares: {
+        Row: {
+          bill_id: string | null;
+          participant_id: string | null;
+          name: string | null;
+          active_count: number | null;
+          share_cents: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'bills_table_id_fkey';
+            columns: ['bill_id'];
+            isOneToOne: false;
+            referencedRelation: 'bills';
             referencedColumns: ['id'];
           },
         ];
@@ -526,6 +558,23 @@ export type Database = {
           total_cents: number;
         }[];
       };
+      get_guest_receipt_path: {
+        Args: { p_session_token: string };
+        Returns: string | null;
+      };
+      get_guest_even_shares: {
+        Args: { p_session_token: string };
+        Returns: {
+          participant_id: string;
+          participant_name: string;
+          is_me: boolean;
+          share_cents: number;
+        }[];
+      };
+      set_bill_split_mode: {
+        Args: { p_bill_id: string; p_mode: 'BY_ITEM' | 'EVENLY' };
+        Returns: Database['public']['Tables']['bills']['Row'];
+      };
       get_guest_tip_shares: {
         Args: { p_session_token: string };
         Returns: {
@@ -534,6 +583,20 @@ export type Database = {
           is_me: boolean;
           tip_share_cents: number;
         }[];
+      };
+      get_guest_settlements: {
+        Args: { p_session_token: string };
+        Returns: {
+          participant_id: string;
+          participant_name: string;
+          is_me: boolean;
+          settled: boolean;
+          settled_at: string | null;
+        }[];
+      };
+      set_participant_settled: {
+        Args: { p_participant_id: string; p_settled: boolean };
+        Returns: Database['public']['Tables']['participants']['Row'];
       };
       get_bill_assignment_summary: {
         Args: { p_session_token: string };

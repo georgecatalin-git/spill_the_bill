@@ -19,8 +19,9 @@ import { toCents } from '@/lib/money';
 import { billTotalCents } from '@/lib/split';
 import { toBillItems } from '@/lib/receipt';
 import type { BillItem } from '@/lib/types';
-import { getOrCreateActiveBill } from '@/lib/services/bill-service';
+import { getOrCreateActiveBill, setBillReceiptPath } from '@/lib/services/bill-service';
 import { createBillItem as createRemoteItem } from '@/lib/services/bill-item-service';
+import { deleteReceiptPhoto, uploadReceiptPhoto } from '@/lib/services/receipt-photo-service';
 
 /** Admin view: verify and correct what was detected before adding it to the bill. */
 export default function ReviewItemsScreen() {
@@ -77,6 +78,20 @@ export default function ReviewItemsScreen() {
           quantity: item.quantity,
           unitPriceCents: item.unitPriceCents,
         });
+      }
+
+      // Kept only now that the lines are committed, so an abandoned scan does
+      // not leave a photo behind. A failure here must not lose the items the
+      // admin just confirmed — the receipt is evidence, not the bill itself.
+      if (uri) {
+        try {
+          const path = await uploadReceiptPhoto(bill.id, uri);
+          const replaced = await setBillReceiptPath(bill.id, path);
+          if (replaced) await deleteReceiptPhoto(replaced);
+        } catch (photoError) {
+          console.warn('Could not keep the receipt photo:', photoError);
+          setSaveError('The items were added, but the receipt photo could not be kept.');
+        }
       }
 
       router.dismissTo({ pathname: '/bill', params: { tableId } });

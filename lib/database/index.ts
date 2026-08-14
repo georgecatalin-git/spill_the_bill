@@ -27,6 +27,10 @@ export type BillSummary = Tables<'bill_summaries'>;
 export type AdminTableSummary = Tables<'admin_table_summaries'>;
 export type BillClaimDetail = Tables<'bill_claim_details'>;
 export type BillTipShareRow = Tables<'bill_tip_shares'>;
+export type BillEvenShareRow = Tables<'bill_even_shares'>;
+
+/** How a bill is divided: by what each person claimed, or straight down the middle. */
+export type SplitMode = 'BY_ITEM' | 'EVENLY';
 
 export type TableStatus =
   | 'WAITING_FOR_GUESTS'

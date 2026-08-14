@@ -85,6 +85,12 @@ Migrations are the source of truth and are applied in order:
 | `20260813210000_item_claims` | claiming, availability, admin claims |
 | `20260814000000_realtime_sync` | change broadcasts for bills and tables |
 | `20260814120000_freeze_completed_bills` | a closed bill stops accepting changes |
+| `20260814140000_fix_claim_upsert_double_count` | a claim that fits is no longer refused |
+| `20260814160000_tip_shares` | the tip, split evenly by headcount |
+| `20260814200000_receipt_photos` | the receipt photo, kept and shared |
+| `20260814220000_even_split_mode` | split the whole bill evenly, no ticking |
+| `20260814230000_grant_settlement_columns` | the grant `settlement_tracking` forgot |
+| `20260814240000_draft_bills_are_never_assigned` | a draft never skips `start_bill` |
 
 Regenerate types after any schema change:
 
@@ -97,6 +103,14 @@ remembering:
 
 - A column-level `REVOKE` does nothing while the role still holds a table-wide
   `SELECT`. Revoke the table privilege, then grant the safe columns back.
+- Column grants are not retroactive, and this has already broken production
+  once. `participants` has no table-wide `SELECT` on purpose, so
+  `session_token` stays unreachable — the price is that **every column added
+  later has to be granted explicitly**. Adding `settled_at`/`settled_by`
+  without granting them made Postgres refuse the entire read, and every admin
+  saw "Could not load the people at this table." until the grant was added.
+  Adding a column to `participants` means adding a grant in the same
+  migration.
 - `EXECUTE` is granted to `PUBLIC` by default. Revoking from `anon` and
   `authenticated` alone leaves the inherited grant in place.
 - A trigger function is **not** `SECURITY DEFINER` unless it says so, and a
@@ -184,6 +198,74 @@ admin can see any gap, and `confirmed_total_cents` is where it settles.
 lines. Swap it back into `lib/receipt/index.ts` only to work on the review
 screens without spending API calls, and never leave it there — an earlier mock
 layer caused a real bug where the app preferred invented data over the user's.
+
+## Two ways to split
+
+`bills.split_mode` decides which question the bill is answering.
+
+**`BY_ITEM`** (the default) is everything described above: people claim what
+they had, and the largest-remainder split divides each line between whoever
+took it.
+
+**`EVENLY`** divides the **grand total** — items, tax, service and tip — by
+headcount, and ignores claims entirely. Splitting only the subtotal would have
+left tax and service allocated to nobody, which is exactly the unexplained
+"remaining" this mode exists to remove. The shares come from
+`bill_even_shares`, largest remainder again, so they add back up to the total
+to the cent.
+
+Three things follow from the mode, and all three are decided in Postgres:
+
+- **Status.** An evenly split bill is `FULLY_ASSIGNED` as soon as it has a
+  total and somebody to divide it between — there is nothing left to claim.
+  `apply_assignment_status` refuses to move a `DRAFT` bill at all: it never
+  needed that guard while claiming required an open bill, but an even split
+  has no claims to wait for and promoted drafts straight past `start_bill`.
+- **Completion.** `validate_bill_completion` asks a different question per
+  mode; "some items have not been claimed yet" cannot apply to an even split.
+- **Assigned / remaining.** Reported as the full total and zero, not from item
+  claims. Reading claims there showed "Remaining <the whole bill>" on a bill
+  where nothing was outstanding.
+
+Switching modes **keeps the claims**. Someone who ticks half a receipt, flips
+to even, and flips back finds their selections where they left them —
+discarding them would make the toggle a one-way door wearing a switch's
+clothes.
+
+One UI note worth keeping: "closed" means `COMPLETED` and nothing else.
+`FULLY_ASSIGNED` used to count as locked on the guest screen, which both
+contradicted the database — it deliberately still lets a guest lower or clear
+their own claim — and made every evenly split bill announce "This bill is
+closed." the moment it opened.
+
+## The receipt photo
+
+Kept with the bill and readable by everyone at the table, so "I never ordered
+the wine" has somewhere to be checked after the plates are gone.
+
+The `receipts` bucket is **private**, and that is not paranoia: a receipt shows
+the table, the time, what was eaten, sometimes the last four digits of a card.
+Access is a signed link that expires in five minutes, minted per request.
+
+Guests are the interesting case, and the same one Realtime had. Storage
+policies are evaluated against the caller's account, and a guest has none — a
+policy cannot tell "a guest at this table" from "any anonymous caller". So
+guests never touch Storage: the `receipt-url` Edge Function resolves their
+session token exactly like every other guest read, then signs a link with the
+service key, which lives only there. The path is looked up server-side from
+whoever the caller turned out to be, so nobody can request someone else's
+receipt by guessing a bill id.
+
+The photo is uploaded only once the scanned lines are confirmed, so an
+abandoned scan leaves nothing behind, and a failure to keep it never loses the
+items the admin just added.
+
+One trap, already walked into: **do not clean up storage objects with a
+Postgres trigger.** `delete from storage.objects` raises inside
+`storage.protect_delete` and takes the parent row's deletion down with it, and
+forcing past that guard would only drop Postgres's record while the bytes stay
+in the bucket. Removal goes through the Storage API, from the side holding the
+session.
 
 ## Not built yet
 

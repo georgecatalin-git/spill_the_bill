@@ -7,6 +7,7 @@ import { BillSummaryCard } from '@/components/bill/bill-summary-card';
 import { BillTotals } from '@/components/bill/bill-totals';
 import { BillTotalsModal } from '@/components/bill/bill-totals-modal';
 import { EditableItemRow } from '@/components/bill/editable-item-row';
+import { EvenSplit } from '@/components/bill/even-split';
 import { ItemFormModal } from '@/components/bill/item-form-modal';
 import { MyTotal } from '@/components/bill/my-total';
 import { ReceiptItemRow } from '@/components/bill/receipt-item-row';
@@ -72,7 +73,18 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
   const warning = useThemeColor({}, 'warning');
 
   const currency = bill.summary?.currency ?? 'EUR';
-  const locked = bill.summary?.status !== 'OPEN';
+
+  // "Closed" means COMPLETED, nothing else. FULLY_ASSIGNED used to count as
+  // locked here, which contradicted the database — it deliberately still lets
+  // a guest lower or clear their own claim, so nobody is stranded on a bill
+  // they can no longer change. An evenly split bill reaches FULLY_ASSIGNED the
+  // moment it opens, which made every guest read "This bill is closed."
+  const completed = bill.summary?.status === 'COMPLETED';
+  const notStarted = bill.summary?.status === 'DRAFT';
+
+  // Nothing to claim on an even split, and nothing to claim before the bill
+  // is open or after it is closed.
+  const locked = completed || notStarted || bill.splitEvenly;
 
   if (bill.loading && bill.items.length === 0) {
     return (
@@ -91,7 +103,15 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <ScreenHeader
             title="Restaurant Bill"
-            subtitle={locked ? 'This bill is closed.' : 'Tap + Add on everything you had.'}
+            subtitle={
+              completed
+                ? 'This bill is closed.'
+                : notStarted
+                  ? 'Waiting for the receipt to be added.'
+                  : bill.splitEvenly
+                    ? 'Everyone pays the same share.'
+                    : 'Tap + Add on everything you had.'
+            }
           />
 
           <ConnectionIndicator status={bill.connectionStatus} />
@@ -129,7 +149,9 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
                     participants={bill.participants}
                     currentParticipantId={bill.myParticipantId}
                     currency={currency}
-                    locked={locked}
+                    // On an even split there is nothing to claim, so the rows
+                    // become a plain reading of the receipt.
+                    locked={locked || bill.splitEvenly}
                     onClaim={() => bill.claim(item.id)}
                     onRelease={() => bill.release(item.id)}
                   />
@@ -140,31 +162,60 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
 
           <MyTotal
             totalCents={bill.myTotalCents}
-            breakdown={bill.items
-              .filter((item) => item.my_quantity > 0)
-              .map((item) => ({
-                item: {
-                  id: item.id,
-                  name: item.name,
-                  unitPriceCents: item.unit_price_cents,
-                  quantity: item.quantity,
-                },
-                shares: item.my_quantity,
-                amountCents: item.my_amount_cents,
-              }))}
+            breakdown={
+              bill.splitEvenly
+                ? []
+                : bill.items
+                    .filter((item) => item.my_quantity > 0)
+                    .map((item) => ({
+                      item: {
+                        id: item.id,
+                        name: item.name,
+                        unitPriceCents: item.unit_price_cents,
+                        quantity: item.quantity,
+                      },
+                      shares: item.my_quantity,
+                      amountCents: item.my_amount_cents,
+                    }))
+            }
             tipCents={bill.myTipCents}
+            evenSplit={bill.splitEvenly}
             currency={currency}
           />
 
-          <TipSplit
-            shares={bill.tipShares.map((share) => ({
+          <EvenSplit
+            shares={bill.evenShares.map((share) => ({
               id: share.participant_id,
               name: share.participant_name,
               isMe: share.is_me,
-              amountCents: share.tip_share_cents,
+              amountCents: share.share_cents,
             }))}
             currency={currency}
           />
+
+          {/* The tip is already inside everyone's even share; showing it again
+              would read as a second charge. */}
+          {!bill.splitEvenly && (
+            <TipSplit
+              shares={bill.tipShares.map((share) => ({
+                id: share.participant_id,
+                name: share.participant_name,
+                isMe: share.is_me,
+                amountCents: share.tip_share_cents,
+              }))}
+              currency={currency}
+            />
+          )}
+
+          {/* Only offered when there is something behind it — a button that
+              leads to "no photo was kept" is a button that wasted a tap. */}
+          {bill.hasReceiptPhoto && (
+            <Button
+              label="See the receipt"
+              variant="secondary"
+              onPress={() => router.push('/receipt-photo')}
+            />
+          )}
 
           {/* The overview answers "what do I owe and who owes what", so it
               comes before the refresh nobody should need any more. */}
@@ -282,6 +333,18 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
             />
           )}
 
+          {/* Offered from the draft onwards: deciding "we're splitting this
+              evenly" usually happens before the receipt is shown to anyone,
+              not after. Claims are kept either way, so this can be flipped
+              back without losing anyone's selections. */}
+          {!completed && (
+            <Button
+              label={bill.splitEvenly ? 'Go back to picking items' : 'Split evenly instead'}
+              variant="secondary"
+              onPress={() => bill.setSplitMode(bill.splitEvenly ? 'BY_ITEM' : 'EVENLY')}
+            />
+          )}
+
           {/* A settled bill is a record, not a working document. Until this
               screen resolved the closed bill the admin never landed here, so
               nothing stopped them editing it. */}
@@ -299,13 +362,28 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
           {!draft && (
             <MyTotal
               totalCents={bill.myTotalCents}
-              breakdown={bill.myBreakdown}
+              breakdown={bill.splitEvenly ? [] : bill.myBreakdown}
               tipCents={bill.myTipCents}
+              evenSplit={bill.splitEvenly}
               currency={currency}
             />
           )}
 
           {!draft && (
+            <EvenSplit
+              shares={bill.evenShares.map((share) => ({
+                id: share.participant_id ?? '',
+                name: share.name ?? '',
+                isMe: share.participant_id === bill.myParticipantId,
+                amountCents: share.share_cents ?? 0,
+              }))}
+              currency={currency}
+            />
+          )}
+
+          {/* Already inside everyone's even share — showing it twice would
+              read as a second charge. */}
+          {!draft && !bill.splitEvenly && (
             <TipSplit
               shares={bill.tipShares.map((share) => ({
                 id: share.participant_id ?? '',
@@ -334,6 +412,19 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
               label="Edit tax, service & tip"
               variant="secondary"
               onPress={() => setTotalsVisible(true)}
+            />
+          )}
+
+          {bill.bill?.receipt_path && (
+            <Button
+              label="See the receipt"
+              variant="secondary"
+              onPress={() =>
+                router.push({
+                  pathname: '/receipt-photo',
+                  params: { billId: bill.bill?.id },
+                })
+              }
             />
           )}
 

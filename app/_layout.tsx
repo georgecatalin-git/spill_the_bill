@@ -44,6 +44,7 @@ export default function RootLayout() {
             <Stack.Screen name="join/[code]" options={backOnlyHeader} />
             <Stack.Screen name="joined" />
             <Stack.Screen name="participant/[id]" options={backOnlyHeader} />
+            <Stack.Screen name="receipt-photo" options={backOnlyHeader} />
             <Stack.Screen name="finish-bill" options={backOnlyHeader} />
           </Stack>
         </GuestProvider>

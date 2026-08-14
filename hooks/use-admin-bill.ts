@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
-import type { Bill, BillClaimDetail, BillItem, BillSummary, BillTipShareRow } from '@/lib/database';
+import type {
+  Bill,
+  BillClaimDetail,
+  BillEvenShareRow,
+  BillItem,
+  BillSummary,
+  BillTipShareRow,
+  SplitMode,
+} from '@/lib/database';
 import {
   adminClaimItem,
   adminUpdateClaimQuantity,
   getAdminParticipantId,
 } from '@/lib/services/claim-service';
-import { getBillClaimDetails, getBillTipShares } from '@/lib/services/overview-service';
+import {
+  getBillClaimDetails,
+  getBillEvenShares,
+  getBillTipShares,
+} from '@/lib/services/overview-service';
 import { listParticipants } from '@/lib/services/table-service';
 import type { ClaimMap, Participant } from '@/lib/types';
 import {
@@ -22,6 +34,7 @@ import {
   getBillSummary,
   getCompletionBlocker,
   getOrCreateActiveBill,
+  setBillSplitMode,
   startBill as startBillRequest,
   updateBillTotals,
   type BillTotalsInput,
@@ -42,6 +55,8 @@ type State = {
   myParticipantId: string;
   /** Everyone's flat slice of the tip, split by headcount. */
   tipShares: BillTipShareRow[];
+  /** Everyone's share when the whole bill is divided evenly. Empty otherwise. */
+  evenShares: BillEvenShareRow[];
 };
 
 /**
@@ -64,6 +79,7 @@ export function useAdminBill(tableId: string | undefined) {
     participants: [],
     myParticipantId: '',
     tipShares: [],
+    evenShares: [],
   });
 
   /**
@@ -78,15 +94,17 @@ export function useAdminBill(tableId: string | undefined) {
 
     try {
       const bill = await getOrCreateActiveBill(tableId);
-      const [items, summary, blocker, details, people, meId, tipShares] = await Promise.all([
-        getBillItems(bill.id),
-        getBillSummary(bill.id),
-        getCompletionBlocker(bill.id),
-        getBillClaimDetails(bill.id),
-        listParticipants(tableId),
-        getAdminParticipantId(tableId),
-        getBillTipShares(bill.id),
-      ]);
+      const [items, summary, blocker, details, people, meId, tipShares, evenShares] =
+        await Promise.all([
+          getBillItems(bill.id),
+          getBillSummary(bill.id),
+          getCompletionBlocker(bill.id),
+          getBillClaimDetails(bill.id),
+          listParticipants(tableId),
+          getAdminParticipantId(tableId),
+          getBillTipShares(bill.id),
+          getBillEvenShares(bill.id),
+        ]);
 
       setState((current) => ({
         bill,
@@ -103,6 +121,7 @@ export function useAdminBill(tableId: string | undefined) {
         })),
         myParticipantId: meId ?? '',
         tipShares,
+        evenShares,
       }));
     } catch (error) {
       setState((current) => ({
@@ -164,6 +183,11 @@ export function useAdminBill(tableId: string | undefined) {
 
   const start = useCallback(() => mutate((billId) => startBillRequest(billId)), [mutate]);
 
+  const setSplitMode = useCallback(
+    (mode: SplitMode) => mutate((billId) => setBillSplitMode(billId, mode)),
+    [mutate]
+  );
+
   const finish = useCallback(() => mutate((billId) => completeBillRequest(billId)), [mutate]);
 
   const claim = useCallback(
@@ -199,17 +223,27 @@ export function useAdminBill(tableId: string | undefined) {
     .filter((entry) => entry.shares > 0);
 
   const myItemsCents = myBreakdown.reduce((sum, entry) => sum + entry.amountCents, 0);
-  const myTipCents =
+  const rawTipCents =
     state.tipShares.find((share) => share.participant_id === state.myParticipantId)
       ?.tip_share_cents ?? 0;
 
-  // Items plus this admin's own flat slice of the tip — they eat at their own
-  // table too, and owe the same tip share as everyone else active there.
-  const myTotalCents = myItemsCents + myTipCents;
+  // An even split already covers items, tax, service and tip, so it replaces
+  // the per-item arithmetic rather than adding to it.
+  const splitEvenly = state.bill?.split_mode === 'EVENLY';
+  const myEvenShare =
+    state.evenShares.find((share) => share.participant_id === state.myParticipantId)
+      ?.share_cents ?? 0;
+
+  const myTipCents = splitEvenly ? 0 : rawTipCents;
+
+  // The admin eats at their own table too, and owes the same share as anyone
+  // else active there.
+  const myTotalCents = splitEvenly ? myEvenShare : myItemsCents + myTipCents;
 
   return {
     ...state,
     connectionStatus,
+    splitEvenly,
     myTipCents,
     reload: () => load(),
     addItem,
@@ -217,6 +251,7 @@ export function useAdminBill(tableId: string | undefined) {
     removeItem,
     saveTotals,
     start,
+    setSplitMode,
     finish,
     claim,
     release,

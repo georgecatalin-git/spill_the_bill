@@ -5,11 +5,14 @@ import {
   claimItem,
   getBillAssignmentSummary,
   getGuestClaims,
+  getGuestEvenShares,
+  getGuestReceiptPath,
   getGuestTotals,
   getTipShares,
   updateClaimQuantity,
   type BillAssignmentSummary,
   type ClaimedBillItem,
+  type EvenShare,
   type ParticipantTotal,
   type TipShare,
 } from '@/lib/services/claim-service';
@@ -27,6 +30,8 @@ export function useGuestBill(sessionToken: string | undefined) {
   const [totals, setTotals] = useState<ParticipantTotal[]>([]);
   const [summary, setSummary] = useState<BillAssignmentSummary | null>(null);
   const [tipShares, setTipShares] = useState<TipShare[]>([]);
+  const [hasReceiptPhoto, setHasReceiptPhoto] = useState(false);
+  const [evenShares, setEvenShares] = useState<EvenShare[]>([]);
   const [loading, setLoading] = useState(Boolean(sessionToken));
   const [error, setError] = useState<string | null>(null);
 
@@ -40,18 +45,23 @@ export function useGuestBill(sessionToken: string | undefined) {
     if (!keepError) setError(null);
 
     try {
-      // Four calls for the whole bill, not one per item.
-      const [loadedItems, loadedTotals, loadedSummary, loadedTipShares] = await Promise.all([
-        getGuestClaims(sessionToken),
-        getGuestTotals(sessionToken),
-        getBillAssignmentSummary(sessionToken),
-        getTipShares(sessionToken),
-      ]);
+      // Six calls for the whole bill, not one per item.
+      const [loadedItems, loadedTotals, loadedSummary, loadedTipShares, receiptPath, loadedEven] =
+        await Promise.all([
+          getGuestClaims(sessionToken),
+          getGuestTotals(sessionToken),
+          getBillAssignmentSummary(sessionToken),
+          getTipShares(sessionToken),
+          getGuestReceiptPath(sessionToken),
+          getGuestEvenShares(sessionToken),
+        ]);
 
       setItems(loadedItems);
       setTotals(loadedTotals);
       setSummary(loadedSummary);
       setTipShares(loadedTipShares);
+      setHasReceiptPhoto(Boolean(receiptPath));
+      setEvenShares(loadedEven);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load the bill.');
     } finally {
@@ -147,18 +157,26 @@ export function useGuestBill(sessionToken: string | undefined) {
   const myTip = tipShares.find((share) => share.is_me);
   const myTipCents = myTip?.tip_share_cents ?? 0;
 
+  // An even split answers the whole question on its own: the share already
+  // covers items, tax, service and tip, so nothing is added to it.
+  const splitEvenly = evenShares.length > 0;
+  const myEvenShare = evenShares.find((share) => share.is_me)?.share_cents ?? 0;
+
   return {
     items,
     totals,
     summary,
     tipShares,
+    evenShares,
+    splitEvenly,
+    hasReceiptPhoto,
     loading,
     error,
     connectionStatus,
     // Items plus this person's flat slice of the tip — the amount they
     // actually owe, not just what they claimed off the receipt.
-    myTotalCents: (me?.total_cents ?? 0) + myTipCents,
-    myTipCents,
+    myTotalCents: splitEvenly ? myEvenShare : (me?.total_cents ?? 0) + myTipCents,
+    myTipCents: splitEvenly ? 0 : myTipCents,
     myParticipantId: me?.participant_id ?? '',
     ...view,
     reload: () => load(),

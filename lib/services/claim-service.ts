@@ -146,6 +146,64 @@ export async function getBillAssignmentSummary(
   };
 }
 
+/**
+ * Who at this table has actually handed over their money.
+ *
+ * Read-only for guests by design: the admin is the one the cash reaches, so
+ * only they can record it. Seeing the state still matters — it is how someone
+ * knows their payment registered without having to ask.
+ */
+export type Settlement = {
+  participant_id: string;
+  participant_name: string;
+  is_me: boolean;
+  settled: boolean;
+  settled_at: string | null;
+};
+
+export async function getGuestSettlements(sessionToken: string): Promise<Settlement[]> {
+  const { data, error } = await supabase.rpc('get_guest_settlements', {
+    p_session_token: sessionToken,
+  });
+
+  if (error) throw toClaimError(error, 'Unable to load who has paid.');
+  return (data ?? []) as unknown as Settlement[];
+}
+
+/**
+ * Whether this guest's table kept a receipt photo.
+ *
+ * Returns the storage path, which on its own opens nothing — the bucket is
+ * private. It is only used to decide whether showing a "See the receipt"
+ * button would lead anywhere.
+ */
+export async function getGuestReceiptPath(sessionToken: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_guest_receipt_path', {
+    p_session_token: sessionToken,
+  });
+
+  if (error) throw toClaimError(error, 'Unable to check for a receipt photo.');
+  return (data as string | null) ?? null;
+}
+
+/** One person's share when the whole bill is divided by headcount. */
+export type EvenShare = {
+  participant_id: string;
+  participant_name: string;
+  is_me: boolean;
+  share_cents: number;
+};
+
+/** Everyone's share on an evenly split bill. Empty when it is split by item. */
+export async function getGuestEvenShares(sessionToken: string): Promise<EvenShare[]> {
+  const { data, error } = await supabase.rpc('get_guest_even_shares', {
+    p_session_token: sessionToken,
+  });
+
+  if (error) throw toClaimError(error, 'Unable to load the even split.');
+  return (data ?? []) as unknown as EvenShare[];
+}
+
 /** Everyone's flat share of the tip — same list shape as `getGuestTotals`. */
 export async function getTipShares(sessionToken: string): Promise<TipShare[]> {
   const { data, error } = await supabase.rpc('get_guest_tip_shares', {

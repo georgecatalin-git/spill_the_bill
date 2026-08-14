@@ -83,6 +83,29 @@ export async function listParticipants(tableId: string): Promise<TableParticipan
 }
 
 /**
+ * Records whether someone has handed over their share.
+ *
+ * Only the table's admin may call this — the server checks, not the screen.
+ * Allowed on a closed bill on purpose: freezing stops the FIGURES changing,
+ * and most people pay after the bill is settled, which is exactly when this
+ * gets used.
+ */
+export async function setParticipantSettled(participantId: string, settled: boolean) {
+  const { error } = await supabase.rpc('set_participant_settled', {
+    p_participant_id: participantId,
+    p_settled: settled,
+  });
+
+  if (error) {
+    // The server's own refusal is already written for a person to read.
+    if (error.message.includes('Only the table admin')) {
+      throw new TableServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not record that payment.');
+  }
+}
+
+/**
  * Adds the admin to their own table's participant list, once.
  *
  * Note the missing `.select()`: `participants` has a column-level grant that

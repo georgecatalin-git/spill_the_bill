@@ -1,4 +1,9 @@
-import type { BillClaimDetail, BillParticipantTotal, BillTipShareRow } from '@/lib/database';
+import type {
+  BillClaimDetail,
+  BillEvenShareRow,
+  BillParticipantTotal,
+  BillTipShareRow,
+} from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -37,6 +42,23 @@ export async function getBillParticipantTotals(billId: string): Promise<BillPart
     .eq('bill_id', billId);
 
   if (error) throw toFriendlyError(error, 'Could not load the totals.');
+  return data ?? [];
+}
+
+/**
+ * Everyone's share when the bill is split evenly.
+ *
+ * Comes back empty on a bill that is split by item, so a caller can read it
+ * unconditionally and get nothing rather than a misleading number.
+ */
+export async function getBillEvenShares(billId: string): Promise<BillEvenShareRow[]> {
+  const { data, error } = await supabase
+    .from('bill_even_shares')
+    .select()
+    .eq('bill_id', billId)
+    .order('name');
+
+  if (error) throw toFriendlyError(error, 'Could not load the even split.');
   return data ?? [];
 }
 

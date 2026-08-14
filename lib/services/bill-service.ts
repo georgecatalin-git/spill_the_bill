@@ -1,4 +1,4 @@
-import type { Bill, BillSummary, BillUpdate } from '@/lib/database';
+import type { Bill, BillSummary, BillUpdate, SplitMode } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -94,6 +94,51 @@ export async function getBill(billId: string): Promise<Bill | null> {
 
   if (error) throw toFriendlyError(error, 'Could not load the bill.');
   return data;
+}
+
+/**
+ * Switches between claiming item by item and splitting the whole bill evenly.
+ *
+ * Claims are left where they are, so flipping back restores what people had
+ * already picked rather than making the toggle a one-way door.
+ */
+export async function setBillSplitMode(billId: string, mode: SplitMode): Promise<Bill> {
+  const { data, error } = await supabase.rpc('set_bill_split_mode', {
+    p_bill_id: billId,
+    p_mode: mode,
+  });
+
+  if (error) {
+    // The server's refusals here are already written for a person to read.
+    if (error.message.includes('Only the table admin') || error.message.includes('completed')) {
+      throw new BillServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not change how this bill is split.');
+  }
+
+  return data as unknown as Bill;
+}
+
+/**
+ * Points the bill at its stored receipt photo.
+ *
+ * Returns the path it replaced, if any, so the caller can drop that object.
+ * The column holds one photo, and a file nothing references is one nobody can
+ * reach but everybody is still paying to store.
+ */
+export async function setBillReceiptPath(billId: string, path: string): Promise<string | null> {
+  const previous = await supabase
+    .from('bills')
+    .select('receipt_path')
+    .eq('id', billId)
+    .maybeSingle();
+
+  const { error } = await supabase.from('bills').update({ receipt_path: path }).eq('id', billId);
+
+  if (error) throw toFriendlyError(error, 'Could not attach the receipt photo.');
+
+  const replaced = previous.data?.receipt_path ?? null;
+  return replaced && replaced !== path ? replaced : null;
 }
 
 export async function createBill(tableId: string, currency = 'EUR'): Promise<Bill> {
