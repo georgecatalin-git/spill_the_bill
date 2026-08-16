@@ -6,6 +6,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/providers/auth-provider';
 import { GuestProvider } from '@/providers/guest-provider';
+import { OnboardingProvider } from '@/providers/onboarding-provider';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -24,29 +25,37 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <GuestProvider>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: theme.background },
-            }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(admin)" />
-            <Stack.Screen name="login" options={backOnlyHeader} />
-            <Stack.Screen name="register" options={backOnlyHeader} />
-            <Stack.Screen name="new-table" options={backOnlyHeader} />
-            <Stack.Screen name="table" options={backOnlyHeader} />
-            <Stack.Screen name="bill" options={backOnlyHeader} />
-            <Stack.Screen name="table-overview" options={backOnlyHeader} />
-            <Stack.Screen name="scan-receipt" options={backOnlyHeader} />
-            <Stack.Screen name="review-receipt" options={backOnlyHeader} />
-            <Stack.Screen name="review-items" options={backOnlyHeader} />
-            <Stack.Screen name="join/index" options={backOnlyHeader} />
-            <Stack.Screen name="join/[code]" options={backOnlyHeader} />
-            <Stack.Screen name="joined" />
-            <Stack.Screen name="participant/[id]" options={backOnlyHeader} />
-            <Stack.Screen name="receipt-photo" options={backOnlyHeader} />
-            <Stack.Screen name="finish-bill" options={backOnlyHeader} />
-          </Stack>
+          <OnboardingProvider>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: theme.background },
+              }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(admin)" />
+              <Stack.Screen name="login" options={backOnlyHeader} />
+              <Stack.Screen name="register" options={backOnlyHeader} />
+              <Stack.Screen name="new-table" options={backOnlyHeader} />
+              <Stack.Screen name="table" options={backOnlyHeader} />
+              <Stack.Screen name="bill" options={backOnlyHeader} />
+              <Stack.Screen name="table-overview" options={backOnlyHeader} />
+              <Stack.Screen name="scan-receipt" options={backOnlyHeader} />
+              <Stack.Screen name="review-receipt" options={backOnlyHeader} />
+              <Stack.Screen name="review-items" options={backOnlyHeader} />
+              <Stack.Screen name="join/index" options={backOnlyHeader} />
+              <Stack.Screen name="join/[code]" options={backOnlyHeader} />
+              <Stack.Screen name="joined" />
+              <Stack.Screen name="participant/[id]" options={backOnlyHeader} />
+              <Stack.Screen name="receipt-photo" options={backOnlyHeader} />
+              <Stack.Screen name="finish-bill" options={backOnlyHeader} />
+              {/* Owns its own header and back handling; never swipe-dismissable,
+                  so leaving it always goes through a path that records it. */}
+              <Stack.Screen
+                name="onboarding"
+                options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
+              />
+            </Stack>
+          </OnboardingProvider>
         </GuestProvider>
       </AuthProvider>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />

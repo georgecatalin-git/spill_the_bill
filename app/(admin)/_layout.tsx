@@ -1,14 +1,27 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, router } from 'expo-router';
+import { useEffect } from 'react';
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/providers/auth-provider';
+import { useOnboarding } from '@/providers/onboarding-provider';
 
 export default function AdminLayout() {
   const { user, restoring } = useAuth();
+  const { shouldAutoStart, claimAutoStart } = useOnboarding();
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+
+  // First run only, and only here: guests never mount the admin area, so this
+  // is the boundary the tutorial belongs behind. Claiming it before navigating
+  // keeps a tab change from opening it a second time.
+  useEffect(() => {
+    if (!shouldAutoStart) return;
+
+    claimAutoStart();
+    router.push('/onboarding');
+  }, [shouldAutoStart, claimAutoStart]);
 
   // Admin area is signed-in only. Guests never reach it.
   if (restoring) return null;
