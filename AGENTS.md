@@ -56,6 +56,7 @@ any id sent by the client.
 ```
 app/                     screens (expo-router)
   (admin)/               dashboard · tables · profile, behind an auth guard
+  onboarding.tsx         the admin tutorial, eight steps
   join/[code].tsx        guest entry from an invitation link
 hooks/
   use-realtime-bill.ts   the only Supabase Realtime subscription
@@ -66,7 +67,7 @@ lib/
   split.ts               display-side helpers for the receipt rows
   services/              every Supabase call lives here, never in a screen
   database/              generated types + readable aliases
-providers/               auth session · guest session
+providers/               auth session · guest session · onboarding
 supabase/migrations/     schema, functions, triggers, RLS
 ```
 
@@ -87,10 +88,12 @@ Migrations are the source of truth and are applied in order:
 | `20260814120000_freeze_completed_bills` | a closed bill stops accepting changes |
 | `20260814140000_fix_claim_upsert_double_count` | a claim that fits is no longer refused |
 | `20260814160000_tip_shares` | the tip, split evenly by headcount |
+| `20260814180000_settlement_tracking` | who has actually handed the money over |
 | `20260814200000_receipt_photos` | the receipt photo, kept and shared |
 | `20260814220000_even_split_mode` | split the whole bill evenly, no ticking |
 | `20260814230000_grant_settlement_columns` | the grant `settlement_tracking` forgot |
 | `20260814240000_draft_bills_are_never_assigned` | a draft never skips `start_bill` |
+| `20260816000000_admin_onboarding` | the tutorial's "already read it" flag |
 
 Regenerate types after any schema change:
 
@@ -266,6 +269,46 @@ Postgres trigger.** `delete from storage.objects` raises inside
 forcing past that guard would only drop Postgres's record while the bytes stay
 in the bucket. Removal goes through the Storage API, from the side holding the
 session.
+
+## The admin tutorial
+
+Eight steps shown once, the first time an admin reaches the app: the table,
+the bill, the invitation, claiming, the live totals, settling up.
+
+**It is a drawing of the app, not the app.** Every mock control is a plain
+`View` rather than a `Pressable`, so a curious tap does nothing at all instead
+of something surprising, and no table, bill or claim is touched. The figures
+on the pages are invented and stay that way, which is not the mock data this
+project forbids elsewhere — nothing here can reach a screen that shows real
+numbers, and there is no path by which the app could prefer it over the
+user's own.
+
+**The flag is a column, not a device setting.** `profiles.onboarding_completed`
+is where "has read it" lives, so somebody who signs in on a second phone is
+not made to read it again. The ownership was already right: RLS on `profiles`
+restricts every row to `id = auth.uid()` for `authenticated` and gives `anon`
+no policy at all, so an admin reaches only their own flag and a guest reaches
+none. No grant was needed either — `profiles` carries table-wide `SELECT` and
+`UPDATE`, which a new column inherits. That is only true because those grants
+are table-wide; `participants` has to name every column, for the reason above.
+
+Guests never see it. The trigger lives behind the `(admin)` layout, which is
+the boundary they cannot cross.
+
+Two details worth keeping:
+
+- The step counter is read from the scroll offset, not from
+  `onMomentumScrollEnd`. A slow drag released without velocity never produces
+  a momentum end on iOS, which would leave "3 / 8" naming a page the reader is
+  no longer looking at.
+- Android's back button steps backwards through the tutorial, and means
+  "skip" on the first page. Left alone it would pop the screen without
+  recording anything, and the tutorial would offer itself again next launch.
+
+Failing to persist is deliberately not surfaced: the admin has already left by
+then, and an unwritten flag means the tutorial asks once more next launch,
+which is the harmless direction to fail. **Profile → Replay Tutorial** reopens
+it at step one and clears nothing else.
 
 ## Not built yet
 
