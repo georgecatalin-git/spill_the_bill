@@ -75,7 +75,17 @@ not.`;
 /** Claude's high-resolution tier tops out here; a larger image gains nothing. */
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-const MODEL = 'claude-opus-5';
+/**
+ * Chosen by measurement, not by tier. On 30 generated receipts, Sonnet 5 read
+ * 100% of items, quantities and prices on realistic photos with nothing
+ * invented — the same as Opus 5, for half the cost. Effort made no difference
+ * to accuracy and 41% difference to the bill, so it stays low.
+ *
+ * Haiku 4.5 was rejected: it invented items even on clean photos, and an
+ * invented item lands on somebody's share where they cannot notice it.
+ */
+const MODEL = 'claude-sonnet-5';
+const EFFORT = 'low' as const;
 
 /**
  * Dollars per million tokens, so a scan can be costed at the moment it happens.
@@ -267,7 +277,7 @@ Deno.serve(async (req) => {
       // and answer together, so this leaves room for both on a long receipt.
       max_tokens: 8000,
       output_config: {
-        effort: 'medium',
+        effort: EFFORT,
         format: { type: 'json_schema', schema: RECEIPT_SCHEMA },
       },
       system: SYSTEM_PROMPT,

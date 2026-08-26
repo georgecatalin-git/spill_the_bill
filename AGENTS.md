@@ -475,6 +475,22 @@ The price table lives beside the model in the Edge Function, because the price
 belongs to the model. Change the two together, or every restaurant's spend is
 quietly misreported.
 
+**The model was chosen by measurement.** Thirty generated receipts through
+Haiku 4.5, Sonnet 5 and Opus 5, scored against ground truth. On realistic
+photos, Sonnet 5 and Opus 5 both read 100% of items, quantities and prices with
+nothing invented; Sonnet costs half. `effort` changed the bill by 41% and the
+accuracy by nothing, so it stays `low`. Haiku 4.5 was rejected for inventing
+items even on clean photos — the one error a guest cannot catch, because it
+lands on their share looking like everything else.
+
+One trap the benchmark walked into, worth remembering if it is ever rebuilt:
+the generator printed the *unit* price in the right-hand column while the
+subtotal summed *line* totals. No real receipt does that — the right column is
+always the line total — so every model divided by the quantity, correctly, and
+was scored wrong for it. The test was measuring its own bug. Receipts vary in
+whether the sub-line spells out `3 x 48.00` or only `buc: 3`; the right column
+does not vary.
+
 ## Not built yet
 
 Payments and https universal links.
