@@ -51,6 +51,10 @@ access — the database functions are the entire authorisation boundary, and
 each one derives the participant from the session token rather than trusting
 any id sent by the client.
 
+Above both sits the **owner** — `profiles.role = 'owner'`, one account, the
+person selling the app. See "The owner area" below. An owner is still an admin
+in every other respect; the role only adds what that section describes.
+
 ## Layout
 
 ```
@@ -94,6 +98,12 @@ Migrations are the source of truth and are applied in order:
 | `20260814230000_grant_settlement_columns` | the grant `settlement_tracking` forgot |
 | `20260814240000_draft_bills_are_never_assigned` | a draft never skips `start_bill` |
 | `20260816000000_admin_onboarding` | the tutorial's "already read it" flag |
+| `20260826000000_owner_role_and_restaurants` | the owner role, the curated restaurant list, usage counts |
+| `20260826120000_restaurants_unique_per_city` | two branches may share a name in different towns |
+| `20260826140000_owner_merges_restaurants` | folding a duplicate into the real restaurant |
+| `20260826160000_owner_deletes_restaurants` | removing a restaurant and its history for good |
+| `20260826180000_no_new_tables_at_hidden_restaurants` | a hidden restaurant stops taking new tables |
+| `20260826200000_restaurants_require_a_city` | the city becomes mandatory, closing the uniqueness hole |
 
 Regenerate types after any schema change:
 
@@ -114,6 +124,12 @@ remembering:
   saw "Could not load the people at this table." until the grant was added.
   Adding a column to `participants` means adding a grant in the same
   migration.
+- The same is now true of `profiles`, but only for writes. `role` had to
+  become unwritable by its own owner — a table-wide `UPDATE` plus the
+  "Admins update their own profile" policy let any admin promote themselves —
+  so `INSERT`/`UPDATE` were revoked and granted back by column. `SELECT` is
+  still table-wide, so a new column stays *readable* automatically but is
+  **not writable until granted by name**.
 - `EXECUTE` is granted to `PUBLIC` by default. Revoking from `anon` and
   `authenticated` alone leaves the inherited grant in place.
 - A trigger function is **not** `SECURITY DEFINER` unless it says so, and a
@@ -309,6 +325,104 @@ Failing to persist is deliberately not surfaced: the admin has already left by
 then, and an unwritten flag means the tutorial asks once more next launch,
 which is the harmless direction to fail. **Profile → Replay Tutorial** reopens
 it at step one and clears nothing else.
+
+## The owner area
+
+One account — `profiles.role = 'owner'` — sees whether the app is actually
+being used: tables started, bills closed, people who joined, and when each
+place was last active. It exists because selling Split to a restaurant needs
+evidence, and until now every admin could only ever see their own tables.
+
+**Counts, never money.** `owner_restaurant_stats()` returns no amounts, no
+participant names and no receipt lines. Whether a place uses the app is a
+different question from what its customers ate, and only the first one is the
+owner's business.
+
+**The role is set in SQL, not in the app and not in a migration.** The repo is
+public, so no email belongs in a committed file:
+
+```sql
+update public.profiles set role = 'owner' where email = '<the owner>';
+```
+
+**The database is the boundary, the hidden tab is a convenience.** The owner
+tab is dropped from the tab bar with `href: null`, and `app/(admin)/owner.tsx`
+redirects a non-owner away, but neither is what protects anything —
+`is_owner()` inside the `SECURITY DEFINER` function is, exactly as the guest
+functions work. Reaching the screen by other means still yields nothing.
+
+## Restaurants are chosen, not typed
+
+`tables.restaurant_name` used to be free text, which meant "Trattoria Roma"
+and "trattoria roma" were two different places and the usage figures above
+would have been worth nothing. Names now live in `restaurants`, every admin
+may read the list, and only the owner may write it.
+
+The unique index is on `lower(trim(name))` **and the city** — that, rather
+than the picker, is what actually prevents duplicates. The backfill collapsed
+the existing `loft`/`LOFT` pair into one restaurant on exactly that rule.
+
+The city is part of the key because a chain has a "Loft" in Cluj and a "Loft"
+in Bucharest, and keying on the name alone refused the second as a duplicate
+of the first. A missing city collapses to `''` rather than staying `NULL`,
+because NULLs are not equal to each other in a unique index and two
+nameless-city rows sharing a name would both be accepted.
+
+The city is now `NOT NULL`, with a check that it is not blank — `NOT NULL`
+alone would accept `'   '` and reopen the same hole. It was nullable only while
+the rows backfilled from the old free text still existed; once they were gone,
+the column could finally say what the form had always required.
+
+A restaurant is normally **deactivated rather than deleted**: `is_active =
+false` drops it out of the picker while its history stays intact. It is the
+answer for a contract that ends — the place stops appearing, and the figures
+that prove it once used Split survive.
+
+That rule is enforced in Postgres, not only in the picker.
+`prevent_table_at_inactive_restaurant` refuses a new table at a hidden
+restaurant, because filtering in the service alone left the database happily
+accepting one. It fires on INSERT only: tables that already exist keep working
+(hiding a place mid-dinner must not break somebody's bill), and
+`owner_merge_restaurants` moves tables with an UPDATE, so consolidating two
+dead entries stays possible. That history is the evidence the owner area exists to
+produce, so a place that merely goes quiet should keep it.
+
+`owner_delete_restaurant` is the way out when a contract ends for good, or a
+row was added by mistake. It takes the tables with it, and everything below
+`tables` already cascades. The confirmation names what is being destroyed —
+tables, closed bills, people — and offers **Hide instead** whenever there is
+anything to lose, because that is usually the answer.
+
+Worth knowing: deleting the tables gets past the completed-bill freeze guards
+without standing them down. Those guards refuse a claim or a line being
+*edited* on a closed bill, and treat a parent cascading away as a different
+thing — `prevent_completed_claim_delete` says so in its own comment. Deleting
+`item_claims` directly on a closed bill is still refused, correctly; that is
+why a bulk wipe has to start at `tables` rather than at the leaves.
+
+There is still no `DELETE` grant on `restaurants` for `authenticated`. The
+function is the only route, which keeps the owner check in one place.
+
+The one exception is **merging**, and it exists because renaming cannot fix a
+duplicate on its own — renaming "italiwn" onto "Italien" just collides with
+the unique index, which is the index working correctly.
+`owner_merge_restaurants` moves the tables across *first* and only then drops
+the row, so no table is ever orphaned; `tables.restaurant_id` is `NOT NULL` and
+would refuse it anyway. It is a `SECURITY DEFINER` function rather than a
+policy exactly because `authenticated` has no `DELETE` here.
+
+The owner edits a name or a town in place on the restaurant's own card. Fixing
+a typo should not cost a navigation, and the usage figures stay on screen while
+you do it.
+
+Google Places was considered and rejected: it bills per request, needs the key
+kept off the device like the Anthropic one, and still would not prevent two
+spellings of the same place. The list is small and the owner meets each
+restaurant in person anyway.
+
+`restaurant_name` still appears in the output of `admin_table_summaries` and
+`get_guest_table`, resolved through the join — screens read the field they
+always read.
 
 ## Not built yet
 
