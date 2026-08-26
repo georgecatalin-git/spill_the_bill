@@ -42,7 +42,14 @@ export default function ScanReceiptScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-        <ScreenHeader title="Scan Receipt" subtitle="Place the entire receipt inside the frame." />
+        {/* The fiscal code is what the scan is checked against, and it is
+            printed in the header — a photo cropped to the item lines is read,
+            paid for, and then refused for want of it. Saying so here costs
+            nothing; finding out afterwards costs a scan. */}
+        <ScreenHeader
+          title="Scan Receipt"
+          subtitle="Photograph the whole bill, including the restaurant's CUI/CIF."
+        />
 
         <View style={styles.preview}>
           {permission?.granted ? (

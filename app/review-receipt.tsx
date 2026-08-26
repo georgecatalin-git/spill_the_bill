@@ -15,7 +15,10 @@ export default function ReviewReceiptScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-        <ScreenHeader title="Review Receipt" subtitle="Make sure the whole receipt is readable." />
+        <ScreenHeader
+          title="Review Receipt"
+          subtitle="The whole bill has to be readable, the CUI/CIF included."
+        />
 
         <View style={styles.preview}>
           <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
