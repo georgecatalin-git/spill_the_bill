@@ -17,7 +17,7 @@ const GENERIC_ERROR = "We couldn't read this receipt.";
  * The screen only sees loading / ready / error, so replacing the mock parser
  * with a real service needs no change here or in the UI.
  */
-export function useReceiptScan(imageUri: string | undefined) {
+export function useReceiptScan(imageUri: string | undefined, tableId?: string) {
   const [state, setState] = useState<ReceiptScanState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
@@ -30,7 +30,7 @@ export function useReceiptScan(imageUri: string | undefined) {
     let cancelled = false;
     setState({ status: 'loading' });
 
-    parseReceipt(imageUri)
+    parseReceipt(imageUri, tableId)
       .then((receipt) => {
         if (!cancelled) setState({ status: 'ready', receipt });
       })
@@ -48,7 +48,7 @@ export function useReceiptScan(imageUri: string | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [imageUri, attempt]);
+  }, [imageUri, tableId, attempt]);
 
   const retry = useCallback(() => setAttempt((current) => current + 1), []);
 

@@ -82,11 +82,11 @@ async function messageFrom(error: unknown, fallback: string) {
   return fallback;
 }
 
-export const claudeReceiptParser: ReceiptParser = async (imageUri) => {
+export const claudeReceiptParser: ReceiptParser = async (imageUri, tableId) => {
   const imageBase64 = await toBase64Jpeg(imageUri);
 
   const { data, error } = await supabase.functions.invoke<RemoteReceipt>('parse-receipt', {
-    body: { image_base64: imageBase64, media_type: 'image/jpeg' },
+    body: { image_base64: imageBase64, media_type: 'image/jpeg', table_id: tableId },
   });
 
   if (error) {

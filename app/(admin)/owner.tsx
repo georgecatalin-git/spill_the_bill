@@ -98,9 +98,16 @@ export default function OwnerScreen() {
       tables: sum.tables + stat.tables_total,
       bills: sum.bills + stat.bills_completed,
       people: sum.people + stat.participants_total,
+      scans: sum.scans + stat.scans_this_month,
+      scanMicros: sum.scanMicros + stat.scan_cost_micros_this_month,
     }),
-    { tables: 0, bills: 0, people: 0 }
+    { tables: 0, bills: 0, people: 0, scans: 0, scanMicros: 0 }
   );
+
+  // What the month has cost so far, against what it earns. Subscriptions are
+  // the same price for everyone, so the sum is all this needs to be.
+  const spentEur = totals.scanMicros / 1e6 / 1.08;
+  const earnedEur = stats.filter((s) => s.is_active).length * 30;
 
   return (
     <ThemedView style={styles.container}>
@@ -141,6 +148,27 @@ export default function OwnerScreen() {
                   People
                 </ThemedText>
               </View>
+            </Card>
+
+            <Card style={styles.spend}>
+              <View style={styles.spendRow}>
+                <ThemedText type="secondary" style={styles.spendLabel}>
+                  Scanări luna aceasta
+                </ThemedText>
+                <ThemedText style={styles.spendValue}>
+                  {totals.scans} ·{' '}
+                  {spentEur > 0 && spentEur < 0.01
+                    ? '<0,01 €'
+                    : `${spentEur.toFixed(2).replace('.', ',')} €`}
+                </ThemedText>
+              </View>
+              <ThemedText type="secondary" style={styles.spendHint}>
+                {earnedEur === 0
+                  ? 'Niciun restaurant activ încă.'
+                  : `Din ${earnedEur} € abonamente active — ${Math.round(
+                      (spentEur / earnedEur) * 100
+                    )}% se duce pe citirea bonurilor.`}
+              </ThemedText>
             </Card>
 
             {error && (
@@ -265,6 +293,26 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 12,
     textAlign: 'center',
+  },
+  spend: {
+    gap: Spacing.xs,
+  },
+  spendRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  spendLabel: {
+    fontSize: 14,
+  },
+  spendValue: {
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '600',
+  },
+  spendHint: {
+    fontSize: 13,
   },
   section: {
     gap: Spacing.md,

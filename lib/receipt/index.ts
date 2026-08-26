@@ -14,9 +14,14 @@ import type { BillItem } from '@/lib/types';
  */
 const parser: ReceiptParser = claudeReceiptParser;
 
-/** Reads a receipt photo. The UI only ever calls this, never a parser directly. */
-export function parseReceipt(imageUri: string) {
-  return parser(imageUri);
+/**
+ * Reads a receipt photo. The UI only ever calls this, never a parser directly.
+ *
+ * `tableId` is what lets the server bill the scan to a restaurant; a scan
+ * without one still works, it just goes uncounted.
+ */
+export function parseReceipt(imageUri: string, tableId?: string) {
+  return parser(imageUri, tableId);
 }
 
 /**

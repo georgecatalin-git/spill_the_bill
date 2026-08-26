@@ -20,4 +20,11 @@ export type ParsedReceipt = {
  * in later as long as it satisfies this signature. It is async on purpose, so
  * the UI already handles waiting and failure.
  */
-export type ReceiptParser = (imageUri: string) => Promise<ParsedReceipt>;
+/**
+ * `tableId` is passed only so the server can attribute the scan's cost to the
+ * right restaurant. The parser never uses it to decide anything.
+ */
+export type ReceiptParser = (
+  imageUri: string,
+  tableId?: string
+) => Promise<ParsedReceipt>;

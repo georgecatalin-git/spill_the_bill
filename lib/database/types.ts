@@ -674,6 +674,18 @@ export type Database = {
       };
       generate_invite_code: { Args: { p_length?: number }; Returns: string };
       is_owner: { Args: never; Returns: boolean };
+      record_receipt_scan: {
+        Args: {
+          p_table_id: string;
+          p_admin_id: string;
+          p_model: string;
+          p_input_tokens: number;
+          p_output_tokens: number;
+          p_cost_micros: number;
+          p_succeeded: boolean;
+        };
+        Returns: undefined;
+      };
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string };
         Returns: undefined;
@@ -694,6 +706,8 @@ export type Database = {
           bills_completed: number;
           participants_total: number;
           last_activity_at: string | null;
+          scans_this_month: number;
+          scan_cost_micros_this_month: number;
         }[];
       };
       is_table_admin: { Args: { p_table_id: string }; Returns: boolean };

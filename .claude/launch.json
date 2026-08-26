@@ -4,13 +4,25 @@
     {
       "name": "expo-web",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8082"
+      ],
       "port": 8082
     },
     {
       "name": "expo-device",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--port", "8081"],
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "--port",
+        "8081",
+        "--ios"
+      ],
       "port": 8081
     }
   ]

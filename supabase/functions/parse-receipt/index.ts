@@ -75,6 +75,68 @@ not.`;
 /** Claude's high-resolution tier tops out here; a larger image gains nothing. */
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+const MODEL = 'claude-opus-5';
+
+/**
+ * Dollars per million tokens, so a scan can be costed at the moment it happens.
+ *
+ * Kept beside the model rather than in the database: the price belongs to the
+ * model, and a stale figure here would quietly misreport every restaurant's
+ * spend. Change both together.
+ */
+const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
+  'claude-opus-5': { input: 5, output: 25 },
+  'claude-sonnet-5': { input: 3, output: 15 },
+  'claude-haiku-4-5': { input: 1, output: 5 },
+};
+
+/** Cost in millionths of a dollar — integer money, as everywhere else here. */
+function costMicros(model: string, inputTokens: number, outputTokens: number): number {
+  const price = PRICE_PER_MTOK[model];
+  if (!price) return 0;
+  return Math.round(inputTokens * price.input + outputTokens * price.output);
+}
+
+/**
+ * Writes the scan against the restaurant behind the table.
+ *
+ * Deliberately never throws: the admin is standing at a table waiting for their
+ * receipt, and losing a bookkeeping row is a far smaller failure than losing
+ * the scan they just paid for. Failures are logged for the developer instead.
+ */
+async function recordScan(params: {
+  tableId: string | null;
+  adminId: string;
+  inputTokens: number;
+  outputTokens: number;
+  succeeded: boolean;
+}) {
+  if (!params.tableId) return;
+
+  const serviceKey =
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SECRET_KEY');
+  if (!serviceKey) {
+    console.error('No service key set; the scan was not recorded.');
+    return;
+  }
+
+  try {
+    const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
+    const { error } = await admin.rpc('record_receipt_scan', {
+      p_table_id: params.tableId,
+      p_admin_id: params.adminId,
+      p_model: MODEL,
+      p_input_tokens: params.inputTokens,
+      p_output_tokens: params.outputTokens,
+      p_cost_micros: costMicros(MODEL, params.inputTokens, params.outputTokens),
+      p_succeeded: params.succeeded,
+    });
+    if (error) console.error('record_receipt_scan failed:', error.message);
+  } catch (error) {
+    console.error('record_receipt_scan threw:', error);
+  }
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type',
@@ -174,11 +236,15 @@ Deno.serve(async (req) => {
 
   let imageBase64: string;
   let mediaType: string;
+  // Optional: without it the scan still runs, it just cannot be attributed.
+  // The restaurant is resolved from this server-side, never sent by the client.
+  let tableId: string | null;
 
   try {
     const body = await req.json();
     imageBase64 = String(body.image_base64 ?? '');
     mediaType = String(body.media_type ?? 'image/jpeg');
+    tableId = body.table_id ? String(body.table_id) : null;
   } catch {
     return json({ error: 'Malformed request.' }, 400);
   }
@@ -196,7 +262,7 @@ Deno.serve(async (req) => {
 
   try {
     const message = await anthropic.messages.create({
-      model: 'claude-opus-5',
+      model: MODEL,
       // Thinking is on by default on this model and `max_tokens` caps thinking
       // and answer together, so this leaves room for both on a long receipt.
       max_tokens: 8000,
@@ -221,12 +287,24 @@ Deno.serve(async (req) => {
 
     // Checked before reading content: a refusal returns HTTP 200 with nothing
     // useful in `content`, so indexing into it first would throw on undefined.
+    // Every outcome below has already been billed, so every outcome is
+    // recorded — a restaurant whose photos keep being refused is expensive
+    // precisely because they keep being refused.
+    const usage = {
+      tableId,
+      adminId: user.id,
+      inputTokens: message.usage.input_tokens,
+      outputTokens: message.usage.output_tokens,
+    };
+
     if (message.stop_reason === 'refusal') {
       console.error('Refused:', message.stop_details);
+      await recordScan({ ...usage, succeeded: false });
       return json({ error: 'This photo could not be read. Try another one.' }, 422);
     }
 
     if (message.stop_reason === 'max_tokens') {
+      await recordScan({ ...usage, succeeded: false });
       return json({ error: 'That receipt is too long to read in one go.' }, 422);
     }
 
@@ -238,6 +316,7 @@ Deno.serve(async (req) => {
     const receipt = JSON.parse(text.text) as ParsedReceipt;
     validate(receipt);
 
+    await recordScan({ ...usage, succeeded: true });
     return json(receipt);
   } catch (error) {
     // The message is logged for the developer and generalised for the guest:

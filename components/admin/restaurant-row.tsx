@@ -12,6 +12,20 @@ import { confirmAction } from '@/lib/confirm';
 import type { OwnerRestaurantStat } from '@/lib/database';
 import { isBlank } from '@/lib/validation';
 
+/**
+ * Scanning cost, in the currency the subscription is priced in.
+ *
+ * The database stores millionths of a dollar; euros are what the 30 €/month
+ * figure is in, so the comparison a person actually makes — "is this place
+ * paying for itself" — needs no arithmetic in their head.
+ */
+function scanCost(micros: number): string {
+  const eur = micros / 1e6 / 1.08;
+  if (eur === 0) return '0 €';
+  if (eur < 0.01) return '<0,01 €';
+  return `${eur.toFixed(2).replace('.', ',')} €`;
+}
+
 /** "3 days ago" reads faster than a timestamp when scanning a list of places. */
 function lastActive(iso: string | null): string {
   if (!iso) return 'Never used';
@@ -193,6 +207,11 @@ export function RestaurantRow({
     );
   }
 
+  // Half the 30 € subscription spent on reading receipts is the point at which
+  // this place stops being comfortably profitable — worth seeing before the
+  // month ends rather than on the invoice afterwards.
+  const overBudget = stat.scan_cost_micros_this_month / 1e6 / 1.08 > 15;
+
   const mergeOptions: DropdownOption[] = mergeTargets.map((row) => ({
     value: row.restaurant_id,
     label: row.restaurant_name,
@@ -224,6 +243,13 @@ export function RestaurantRow({
         </ThemedText>
         <ThemedText type="secondary" style={styles.figure}>
           {lastActive(stat.last_activity_at)}
+        </ThemedText>
+        <ThemedText
+          type="secondary"
+          style={[styles.figure, overBudget && { color: warning }]}>
+          {stat.scans_this_month} {stat.scans_this_month === 1 ? 'scanare' : 'scanări'} luna
+          aceasta · {scanCost(stat.scan_cost_micros_this_month)}
+          {overBudget ? ' — peste jumătate din abonament' : ''}
         </ThemedText>
       </View>
 

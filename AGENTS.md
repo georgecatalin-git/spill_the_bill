@@ -105,6 +105,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826180000_no_new_tables_at_hidden_restaurants` | a hidden restaurant stops taking new tables |
 | `20260826200000_restaurants_require_a_city` | the city becomes mandatory, closing the uniqueness hole |
 | `20260826220000_restaurants_grants_match_the_rules` | the grants on `restaurants` stop contradicting the policies |
+| `20260826240000_receipt_scan_log` | what each restaurant costs in receipt-reading |
 
 Regenerate types after any schema change:
 
@@ -436,6 +437,43 @@ restaurant in person anyway.
 `restaurant_name` still appears in the output of `admin_table_summaries` and
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
+
+## What a restaurant costs to serve
+
+Reading a receipt is the only part of Split billed per use, and it is billed by
+the token. A place with twenty tables and three sittings a night can spend more
+on API calls than it pays in subscription — and without a record, the first
+sign of that is the Anthropic invoice, which does not mention restaurants by
+name.
+
+So `parse-receipt` writes a row per scan into `receipt_scans`: the tokens the
+API reported (not an estimate — `usage` was already in the response and was
+being thrown away), the model, and the cost. The owner sees the month's count
+and spend per restaurant.
+
+**Cost is in micro-dollars.** Integer money, like everything else here. Cents
+are too coarse: a scan costs about five of them and the differences worth
+seeing are smaller than one.
+
+**Failed scans count too.** A refusal or a truncated answer still spent the
+tokens, and a place whose photos keep failing is expensive precisely because
+they keep failing.
+
+**The scan is attributed server-side.** The app sends `table_id`; the
+restaurant is resolved from it inside `record_receipt_scan`, so a client cannot
+bill its scans to somebody else. That function is granted to `service_role`
+alone — not even the owner may write a row, which is what keeps the figures
+worth trusting. Reading goes through `owner_restaurant_stats`; `receipt_scans`
+itself has no grants for `anon` or `authenticated` at all.
+
+**Recording never fails the scan.** The admin is standing at a table waiting
+for their receipt. A lost bookkeeping row is a smaller failure than a lost
+scan they have already paid for, so `recordScan` logs and returns rather than
+throwing.
+
+The price table lives beside the model in the Edge Function, because the price
+belongs to the model. Change the two together, or every restaurant's spend is
+quietly misreported.
 
 ## Not built yet
 

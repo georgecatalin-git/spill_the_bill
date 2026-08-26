@@ -28,7 +28,7 @@ export default function ReviewItemsScreen() {
   const { uri, tableId } = useLocalSearchParams<{ uri: string; tableId?: string }>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const { state, retry } = useReceiptScan(uri);
+  const { state, retry } = useReceiptScan(uri, tableId);
 
   const [items, setItems] = useState<BillItem[]>([]);
   const [editingItem, setEditingItem] = useState<BillItem | null>(null);
