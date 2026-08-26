@@ -455,9 +455,12 @@ and spend per restaurant.
 are too coarse: a scan costs about five of them and the differences worth
 seeing are smaller than one.
 
-**Failed scans count too.** A refusal or a truncated answer still spent the
-tokens, and a place whose photos keep failing is expensive precisely because
-they keep failing.
+**Failed scans count too**, and "failed" includes a reply with no items. A
+refusal, a truncated answer, and a photo of a laptop all spent the tokens and
+left the admin with nothing. The empty reply is the interesting one: it is a
+*correct* answer — there was no receipt in the picture — but counting it as a
+success would make "failed scans" a number that quietly excludes the most
+common way scanning wastes money.
 
 **The scan is attributed server-side.** The app sends `table_id`; the
 restaurant is resolved from it inside `record_receipt_scan`, so a client cannot

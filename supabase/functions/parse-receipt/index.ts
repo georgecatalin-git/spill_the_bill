@@ -326,7 +326,13 @@ Deno.serve(async (req) => {
     const receipt = JSON.parse(text.text) as ParsedReceipt;
     validate(receipt);
 
-    await recordScan({ ...usage, succeeded: true });
+    // A reply with no items is a valid answer to "what is on this receipt" —
+    // it is what a photo of a laptop, or a hand, correctly produces. But it
+    // spent the tokens and gave the admin nothing, so it is a failed scan in
+    // the only sense that matters here: the money is gone and the receipt is
+    // not read. Recording it as a success would make "failed scans" a number
+    // that quietly excludes the most common way scanning wastes money.
+    await recordScan({ ...usage, succeeded: receipt.items.length > 0 });
     return json(receipt);
   } catch (error) {
     // The message is logged for the developer and generalised for the guest:
