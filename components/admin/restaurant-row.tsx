@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,9 @@ import { Dropdown, type DropdownOption } from '@/components/ui/dropdown';
 import { FormField } from '@/components/ui/form-field';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { confirmAction } from '@/lib/confirm';
 import type { OwnerRestaurantStat } from '@/lib/database';
+import { isBlank } from '@/lib/validation';
 
 /** "3 days ago" reads faster than a timestamp when scanning a list of places. */
 function lastActive(iso: string | null): string {
@@ -57,17 +59,34 @@ export function RestaurantRow({
   const [merging, setMerging] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
+  const [nameError, setNameError] = useState<string>();
+  const [cityError, setCityError] = useState<string>();
   const [error, setError] = useState<string | null>(null);
 
   function startEditing() {
     setName(stat.restaurant_name);
     setCity(stat.city);
+    setNameError(undefined);
+    setCityError(undefined);
     setError(null);
     setMerging(false);
     setEditing(true);
   }
 
   async function save() {
+    // The same two rules the Add form applies. Without them a cleared field
+    // reaches the database and comes back as a check-constraint failure that
+    // never mentions which field was the problem.
+    if (isBlank(name)) {
+      setNameError('Please name the restaurant.');
+      return;
+    }
+
+    if (isBlank(city)) {
+      setCityError('Please say which town this one is in.');
+      return;
+    }
+
     setError(null);
     try {
       await onSave(name, city);
@@ -77,63 +96,57 @@ export function RestaurantRow({
     }
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     const hasHistory = stat.tables_total > 0;
 
-    // A place with history behind it loses the very figures the owner area
-    // exists to show, so the warning names them rather than saying "are you
-    // sure". An empty one needs no such ceremony.
+    // The warning names what is being destroyed rather than asking "are you
+    // sure". Hiding is one tap away on this same card, and the message says so,
+    // because for a contract that merely ends that is the better answer.
     const message = hasHistory
-      ? `${stat.tables_total} ${stat.tables_total === 1 ? 'table' : 'tables'}, ${stat.bills_completed} closed ${stat.bills_completed === 1 ? 'bill' : 'bills'} and ${stat.participants_total} ${stat.participants_total === 1 ? 'person' : 'people'} are deleted with it. You lose the record that this place ever used Split.\n\nHide it instead to keep the history.`
+      ? `${stat.tables_total} ${stat.tables_total === 1 ? 'table' : 'tables'}, ${stat.bills_completed} closed ${stat.bills_completed === 1 ? 'bill' : 'bills'} and ${stat.participants_total} ${stat.participants_total === 1 ? 'person' : 'people'} are deleted with it. You lose the record that this place ever used Split.\n\nTo keep the history, cancel and use "Hide from the picker" instead.`
       : 'Nothing has happened here yet, so nothing else is lost.';
 
-    Alert.alert(`Delete ${stat.restaurant_name}?`, message, [
-      { text: 'Cancel', style: 'cancel' },
-      ...(hasHistory
-        ? [{ text: 'Hide instead', onPress: () => void onToggleActive() }]
-        : []),
-      {
-        text: 'Delete',
-        style: 'destructive' as const,
-        onPress: async () => {
-          setError(null);
-          try {
-            await onDelete();
-          } catch (caught) {
-            setError(
-              caught instanceof Error ? caught.message : 'Could not delete the restaurant.'
-            );
-          }
-        },
-      },
-    ]);
+    const confirmed = await confirmAction({
+      title: `Delete ${stat.restaurant_name}?`,
+      message,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    setError(null);
+    try {
+      await onDelete();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not delete the restaurant.');
+    }
   }
 
-  function confirmMerge(targetId: string) {
+  async function confirmMerge(targetId: string) {
     const target = mergeTargets.find((row) => row.restaurant_id === targetId);
     if (!target) return;
 
-    Alert.alert(
-      `Merge into ${target.restaurant_name}?`,
-      `${stat.tables_total} ${stat.tables_total === 1 ? 'table moves' : 'tables move'} across, and ${stat.restaurant_name} is removed. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Merge',
-          style: 'destructive',
-          onPress: async () => {
-            setError(null);
-            try {
-              await onMerge(targetId);
-            } catch (caught) {
-              setError(
-                caught instanceof Error ? caught.message : 'Could not merge the restaurants.'
-              );
-            }
-          },
-        },
-      ]
-    );
+    const confirmed = await confirmAction({
+      title: `Merge into ${target.restaurant_name}?`,
+      message: `${stat.tables_total} ${stat.tables_total === 1 ? 'table moves' : 'tables move'} across, and ${stat.restaurant_name} is removed. This cannot be undone.`,
+      confirmLabel: 'Merge',
+      destructive: true,
+    });
+
+    if (!confirmed) {
+      // Put the card back rather than leaving the picker open on a choice that
+      // was declined.
+      setMerging(false);
+      return;
+    }
+
+    setError(null);
+    try {
+      await onMerge(targetId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not merge the restaurants.');
+    }
   }
 
   if (editing) {
@@ -142,16 +155,24 @@ export function RestaurantRow({
         <FormField
           label="Name"
           value={name}
-          onChangeText={setName}
+          onChangeText={(text) => {
+            setName(text);
+            setNameError(undefined);
+          }}
           placeholder="Trattoria Roma"
           autoCapitalize="words"
+          error={nameError}
         />
         <FormField
           label="City"
           value={city}
-          onChangeText={setCity}
+          onChangeText={(text) => {
+            setCity(text);
+            setCityError(undefined);
+          }}
           placeholder="Cluj-Napoca"
           autoCapitalize="words"
+          error={cityError}
         />
 
         {error && (
@@ -217,7 +238,12 @@ export function RestaurantRow({
           <ThemedText type="secondary" style={styles.figure}>
             Move this one&apos;s tables into:
           </ThemedText>
-          <Dropdown value="" options={mergeOptions} onChange={confirmMerge} placeholder="Choose a restaurant" />
+          <Dropdown
+            value=""
+            options={mergeOptions}
+            onChange={(id) => void confirmMerge(id)}
+            placeholder="Choose a restaurant"
+          />
           <Pressable onPress={() => setMerging(false)}>
             <ThemedText type="secondary" style={styles.link}>
               Cancel
@@ -246,7 +272,7 @@ export function RestaurantRow({
             </Pressable>
           )}
 
-          <Pressable onPress={confirmDelete} disabled={busy}>
+          <Pressable onPress={() => void confirmDelete()} disabled={busy}>
             <ThemedText type="secondary" style={[styles.link, { color: warning }]}>
               Delete
             </ThemedText>

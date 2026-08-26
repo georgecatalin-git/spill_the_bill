@@ -41,7 +41,17 @@ export async function createTable(name: string, restaurantId: string): Promise<T
     .select()
     .single();
 
-  if (error) throw toFriendlyError(error, 'Could not create the table. Please try again.');
+  if (error) {
+    // The server's own refusal is already written for a person to read, and
+    // "please try again" is actively wrong here — a hidden restaurant will
+    // refuse every retry. Same passthrough as setParticipantSettled below.
+    if (error.message.includes('no longer taking new tables')) {
+      throw new TableServiceError(
+        'That restaurant is no longer taking new tables. Pick another one.'
+      );
+    }
+    throw toFriendlyError(error, 'Could not create the table. Please try again.');
+  }
   return data;
 }
 

@@ -104,6 +104,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826160000_owner_deletes_restaurants` | removing a restaurant and its history for good |
 | `20260826180000_no_new_tables_at_hidden_restaurants` | a hidden restaurant stops taking new tables |
 | `20260826200000_restaurants_require_a_city` | the city becomes mandatory, closing the uniqueness hole |
+| `20260826220000_restaurants_grants_match_the_rules` | the grants on `restaurants` stop contradicting the policies |
 
 Regenerate types after any schema change:
 
@@ -400,8 +401,20 @@ thing — `prevent_completed_claim_delete` says so in its own comment. Deleting
 `item_claims` directly on a closed bill is still refused, correctly; that is
 why a bulk wipe has to start at `tables` rather than at the leaves.
 
-There is still no `DELETE` grant on `restaurants` for `authenticated`. The
-function is the only route, which keeps the owner check in one place.
+`authenticated` has no `DELETE` on `restaurants`, and `anon` has nothing at
+all, so the function is the only route and the owner check lives in one place.
+That is now true rather than merely intended: Supabase's default privileges
+had granted every role all four verbs on the table, and the original
+`grant select, insert, update` was additive — it revoked nothing. Nothing was
+exploitable, because RLS has no `DELETE` policy and `anon` has no policy at
+all, but the *reason* written down was false, which is the dangerous kind of
+wrong in a file the next change reads for guidance.
+
+Worth carrying forward: on this project RLS is the guard and grants are
+defence in depth, and a fresh table starts with `anon` and `authenticated`
+holding everything. Revoke what a role should not have in the same migration
+that creates the table, or the comment explaining why it is safe will not
+match the privileges.
 
 The one exception is **merging**, and it exists because renaming cannot fix a
 duplicate on its own — renaming "italiwn" onto "Italien" just collides with
