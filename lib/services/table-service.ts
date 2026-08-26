@@ -14,8 +14,16 @@ function toFriendlyError(error: unknown, fallback: string) {
   return new TableServiceError(fallback);
 }
 
+/**
+ * A table together with the name of the restaurant it belongs to.
+ *
+ * The name lives on `restaurants` now, so it arrives through the join rather
+ * than off the table row itself.
+ */
+export type TableWithRestaurant = TableRow & { restaurant_name: string };
+
 /** Creates a table for the signed-in admin. The invite code is generated server-side. */
-export async function createTable(name: string, restaurantName: string): Promise<TableRow> {
+export async function createTable(name: string, restaurantId: string): Promise<TableRow> {
   const { data: userData } = await supabase.auth.getUser();
   const adminId = userData.user?.id;
 
@@ -28,7 +36,7 @@ export async function createTable(name: string, restaurantName: string): Promise
     .insert({
       admin_id: adminId,
       name: name.trim(),
-      restaurant_name: restaurantName.trim() || null,
+      restaurant_id: restaurantId,
     })
     .select()
     .single();
@@ -48,11 +56,18 @@ export async function listTableSummaries(): Promise<AdminTableSummary[]> {
   return data ?? [];
 }
 
-export async function getTable(tableId: string): Promise<TableRow | null> {
-  const { data, error } = await supabase.from('tables').select().eq('id', tableId).maybeSingle();
+export async function getTable(tableId: string): Promise<TableWithRestaurant | null> {
+  const { data, error } = await supabase
+    .from('tables')
+    .select('*, restaurants(name)')
+    .eq('id', tableId)
+    .maybeSingle();
 
   if (error) throw toFriendlyError(error, 'Could not load the table.');
-  return data;
+  if (!data) return null;
+
+  const { restaurants, ...table } = data;
+  return { ...table, restaurant_name: restaurants?.name ?? '' };
 }
 
 export async function listTables(): Promise<TableRow[]> {

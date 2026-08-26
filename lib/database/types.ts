@@ -16,6 +16,7 @@ export type Database = {
           full_name: string;
           id: string;
           onboarding_completed: boolean;
+          role: string;
           updated_at: string;
         };
         Insert: {
@@ -24,6 +25,7 @@ export type Database = {
           full_name: string;
           id: string;
           onboarding_completed?: boolean;
+          role?: string;
           updated_at?: string;
         };
         Update: {
@@ -32,6 +34,34 @@ export type Database = {
           full_name?: string;
           id?: string;
           onboarding_completed?: boolean;
+          role?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      restaurants: {
+        Row: {
+          city: string;
+          created_at: string;
+          id: string;
+          is_active: boolean;
+          name: string;
+          updated_at: string;
+        };
+        Insert: {
+          city: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          updated_at?: string;
+        };
+        Update: {
+          city?: string;
+          created_at?: string;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
           updated_at?: string;
         };
         Relationships: [];
@@ -43,7 +73,7 @@ export type Database = {
           id: string;
           invite_code: string;
           name: string;
-          restaurant_name: string | null;
+          restaurant_id: string;
           status: string;
           updated_at: string;
         };
@@ -53,7 +83,7 @@ export type Database = {
           id?: string;
           invite_code?: string;
           name: string;
-          restaurant_name?: string | null;
+          restaurant_id: string;
           status?: string;
           updated_at?: string;
         };
@@ -63,7 +93,7 @@ export type Database = {
           id?: string;
           invite_code?: string;
           name?: string;
-          restaurant_name?: string | null;
+          restaurant_id?: string;
           status?: string;
           updated_at?: string;
         };
@@ -73,6 +103,13 @@ export type Database = {
             columns: ['admin_id'];
             isOneToOne: false;
             referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'tables_restaurant_id_fkey';
+            columns: ['restaurant_id'];
+            isOneToOne: false;
+            referencedRelation: 'restaurants';
             referencedColumns: ['id'];
           },
         ];
@@ -362,6 +399,7 @@ export type Database = {
           admin_id: string | null;
           name: string | null;
           restaurant_name: string | null;
+          restaurant_id: string | null;
           status: string | null;
           invite_code: string | null;
           created_at: string | null;
@@ -635,6 +673,29 @@ export type Database = {
         Returns: { is_valid: boolean; reason: string | null }[];
       };
       generate_invite_code: { Args: { p_length?: number }; Returns: string };
+      is_owner: { Args: never; Returns: boolean };
+      owner_delete_restaurant: {
+        Args: { p_restaurant_id: string };
+        Returns: undefined;
+      };
+      owner_merge_restaurants: {
+        Args: { p_source: string; p_target: string };
+        Returns: undefined;
+      };
+      owner_restaurant_stats: {
+        Args: never;
+        Returns: {
+          restaurant_id: string;
+          restaurant_name: string;
+          city: string;
+          is_active: boolean;
+          tables_total: number;
+          tables_active: number;
+          bills_completed: number;
+          participants_total: number;
+          last_activity_at: string | null;
+        }[];
+      };
       is_table_admin: { Args: { p_table_id: string }; Returns: boolean };
       is_bill_admin: { Args: { p_bill_id: string }; Returns: boolean };
       is_bill_item_admin: { Args: { p_bill_item_id: string }; Returns: boolean };

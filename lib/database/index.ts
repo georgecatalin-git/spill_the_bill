@@ -1,4 +1,4 @@
-import type { Tables, TablesInsert, TablesUpdate } from '@/lib/database/types';
+import type { Database, Tables, TablesInsert, TablesUpdate } from '@/lib/database/types';
 
 /**
  * Readable names for the database rows.
@@ -9,6 +9,7 @@ import type { Tables, TablesInsert, TablesUpdate } from '@/lib/database/types';
  */
 
 export type Profile = Tables<'profiles'>;
+export type Restaurant = Tables<'restaurants'>;
 export type TableRow = Tables<'tables'>;
 export type Participant = Tables<'participants'>;
 export type Bill = Tables<'bills'>;
@@ -29,6 +30,13 @@ export type BillClaimDetail = Tables<'bill_claim_details'>;
 export type BillTipShareRow = Tables<'bill_tip_shares'>;
 export type BillEvenShareRow = Tables<'bill_even_shares'>;
 
+/** Per-restaurant usage counts, owner only. Deliberately carries no money. */
+export type OwnerRestaurantStat =
+  Database['public']['Functions']['owner_restaurant_stats']['Returns'][number];
+
+/** Who a signed-in account is. `owner` is the application owner; everyone else is an admin. */
+export type ProfileRole = 'admin' | 'owner';
+
 /** How a bill is divided: by what each person claimed, or straight down the middle. */
 export type SplitMode = 'BY_ITEM' | 'EVENLY';
 
@@ -41,12 +49,14 @@ export type TableStatus =
 export type BillStatus = 'DRAFT' | 'OPEN' | 'FULLY_ASSIGNED' | 'COMPLETED';
 
 export type ProfileInsert = TablesInsert<'profiles'>;
+export type RestaurantInsert = TablesInsert<'restaurants'>;
 export type TableInsert = TablesInsert<'tables'>;
 export type ParticipantInsert = TablesInsert<'participants'>;
 export type BillInsert = TablesInsert<'bills'>;
 export type BillItemInsert = TablesInsert<'bill_items'>;
 export type ItemClaimInsert = TablesInsert<'item_claims'>;
 
+export type RestaurantUpdate = TablesUpdate<'restaurants'>;
 export type TableUpdate = TablesUpdate<'tables'>;
 export type BillUpdate = TablesUpdate<'bills'>;
 export type BillItemUpdate = TablesUpdate<'bill_items'>;
