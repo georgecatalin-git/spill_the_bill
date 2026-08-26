@@ -1,39 +1,49 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
-import { Dropdown, type DropdownOption } from '@/components/ui/dropdown';
 import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { LocationError, getCurrentPosition } from '@/lib/location';
+import type { RestaurantMatch } from '@/lib/database';
 import { createTable, ensureAdminParticipant } from '@/lib/services/table-service';
-import { useRestaurants } from '@/lib/services/use-restaurants';
+import { useRestaurantSearch } from '@/lib/services/use-restaurant-search';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function NewTableScreen() {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const warning = useThemeColor({}, 'warning');
-  const { restaurants, loading, error: restaurantsError } = useRestaurants();
+  const border = useThemeColor({}, 'border');
 
   const [name, setName] = useState('');
-  const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [chosen, setChosen] = useState<RestaurantMatch | null>(null);
   const [error, setError] = useState<string>();
   const [restaurantError, setRestaurantError] = useState<string>();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const restaurantOptions: DropdownOption[] = restaurants.map((restaurant) => ({
-    value: restaurant.id,
-    label: restaurant.name,
-    hint: restaurant.city,
-  }));
+  const { matches, searching, error: searchError, tooShort } = useRestaurantSearch(query);
+
+  function pick(match: RestaurantMatch) {
+    setChosen(match);
+    // The box shows what was picked, so the list has nothing left to offer.
+    setQuery(match.name);
+    setRestaurantError(undefined);
+  }
 
   async function handleCreate() {
     if (isBlank(name)) {
@@ -41,23 +51,16 @@ export default function NewTableScreen() {
       return;
     }
 
-    if (!restaurantId) {
-      setRestaurantError('Please choose the restaurant.');
+    if (!chosen) {
+      setRestaurantError('Type the restaurant you are in and pick it from the list.');
       return;
     }
 
     const hostName = user?.name ?? 'The host';
-    const restaurantName = restaurants.find((row) => row.id === restaurantId)?.name ?? '';
     setSubmitError(null);
     setPending(true);
     try {
-      // The owner opens tables wherever the meeting happens, so they are never
-      // asked. Everyone else is: the database refuses a table opened away from
-      // the restaurant it names, and asking here turns that refusal into a
-      // permission prompt rather than an error after the fact.
-      const position = role === 'owner' ? null : await getCurrentPosition();
-
-      const table = await createTable(name, restaurantId, position);
+      const table = await createTable(name, chosen.id);
       await ensureAdminParticipant(table.id, hostName);
 
       router.replace({
@@ -66,17 +69,11 @@ export default function NewTableScreen() {
           id: table.id,
           code: table.invite_code,
           name: table.name,
-          restaurant: restaurantName,
+          restaurant: chosen.name,
         },
       });
     } catch (caught) {
-      // Both LocationError and TableServiceError are already written for the
-      // person holding the phone, and each says what to do next.
-      setSubmitError(
-        caught instanceof LocationError || caught instanceof Error
-          ? caught.message
-          : 'Could not create the table.'
-      );
+      setSubmitError(caught instanceof Error ? caught.message : 'Could not create the table.');
     } finally {
       setPending(false);
     }
@@ -115,33 +112,59 @@ export default function NewTableScreen() {
                 Restaurant
               </ThemedText>
 
-              {loading ? (
+              {/* Typed rather than chosen from a list. Spelling is free — case,
+                  diacritics and "SRL" are all folded server-side — but the name
+                  has to be right, and a place the owner has not entered is
+                  simply not found. */}
+              <FormField
+                label=""
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  setChosen(null);
+                  setRestaurantError(undefined);
+                }}
+                placeholder="Type where you are"
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+
+              {chosen ? (
                 <ThemedText type="secondary" style={styles.hint}>
-                  Loading restaurants…
+                  {chosen.name} · {chosen.city}
                 </ThemedText>
-              ) : restaurants.length === 0 ? (
+              ) : tooShort ? (
                 <ThemedText type="secondary" style={styles.hint}>
-                  {role === 'owner'
-                    ? 'No restaurants yet. Add one from the Owner tab first.'
-                    : 'No restaurants available yet. Ask the owner to add yours.'}
+                  Type at least three letters of the restaurant&apos;s name.
+                </ThemedText>
+              ) : searching ? (
+                <ThemedText type="secondary" style={styles.hint}>
+                  Searching…
+                </ThemedText>
+              ) : matches.length === 0 ? (
+                <ThemedText type="secondary" style={styles.hint}>
+                  Nothing found. Check the spelling — and if this place is not on
+                  Split yet, the owner has to add it first.
                 </ThemedText>
               ) : (
-                // The town is shown as the hint, because two branches of a
-                // chain are told apart by nothing else.
-                <Dropdown
-                  value={restaurantId ?? ''}
-                  options={restaurantOptions}
-                  onChange={(id) => {
-                    setRestaurantId(id);
-                    setRestaurantError(undefined);
-                  }}
-                  placeholder="Where are you?"
-                />
+                <View style={[styles.matches, { borderColor: border }]}>
+                  {matches.map((match) => (
+                    <Pressable
+                      key={match.id}
+                      onPress={() => pick(match)}
+                      style={[styles.match, { borderColor: border }]}>
+                      <ThemedText style={styles.matchName}>{match.name}</ThemedText>
+                      <ThemedText type="secondary" style={styles.hint}>
+                        {match.city}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
               )}
 
-              {(restaurantError ?? restaurantsError) && (
+              {(restaurantError ?? searchError) && (
                 <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                  {restaurantError ?? restaurantsError}
+                  {restaurantError ?? searchError}
                 </ThemedText>
               )}
             </View>
@@ -179,6 +202,21 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: Spacing.sm,
+  },
+  matches: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+  },
+  match: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 2,
+  },
+  matchName: {
+    fontSize: 15,
+    lineHeight: 20,
   },
   fieldLabel: {
     opacity: 0.6,

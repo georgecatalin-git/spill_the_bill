@@ -141,7 +141,7 @@ function getServiceKey(): string | undefined {
  * attribute it to. Uncounted spending is the one thing the scan log exists to
  * make impossible, so a scan that cannot be attributed does not happen.
  */
-async function resolveRestaurant(tableId: string, adminId: string): Promise<string | null> {
+async function resolveRestaurant(tableId: string, adminId: string): Promise<ScanTarget | null> {
   const serviceKey = getServiceKey();
   if (!serviceKey) {
     console.error('No service key set; the scan cannot be attributed.');
@@ -158,7 +158,7 @@ async function resolveRestaurant(tableId: string, adminId: string): Promise<stri
     console.error('resolve_scan_restaurant failed:', error.message);
     return null;
   }
-  return (data as string | null) ?? null;
+  return (data as ScanTarget[])[0] ?? null;
 }
 
 /**
@@ -179,10 +179,12 @@ async function checkReceiptOrigin(
   receiptTaxId: string,
   receiptName: string
 ): Promise<ScanVerdict> {
-  const unknown: ScanVerdict = { verdict: 'unknown', chosen_name: null, receipt_name: null };
+  // A failure to ask is not evidence of a wrong receipt, and the admin has
+  // already paid for the scan by the time this runs.
+  const unchecked: ScanVerdict = { verdict: 'ok', chosen_name: null, receipt_name: null };
 
   const serviceKey = getServiceKey();
-  if (!serviceKey) return unknown;
+  if (!serviceKey) return unchecked;
 
   try {
     const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
@@ -195,12 +197,12 @@ async function checkReceiptOrigin(
 
     if (error) {
       console.error('check_scan_receipt failed:', error.message);
-      return unknown;
+      return unchecked;
     }
-    return (data as ScanVerdict[])[0] ?? unknown;
+    return (data as ScanVerdict[])[0] ?? unchecked;
   } catch (error) {
     console.error('check_scan_receipt threw:', error);
-    return unknown;
+    return unchecked;
   }
 }
 
@@ -264,10 +266,12 @@ type ParsedReceipt = {
 };
 
 type ScanVerdict = {
-  verdict: 'no_table' | 'unknown' | 'ok' | 'mismatch';
+  verdict: 'no_table' | 'ok' | 'mismatch' | 'no_receipt_code' | 'restaurant_has_no_code';
   chosen_name: string | null;
   receipt_name: string | null;
 };
+
+type ScanTarget = { restaurant_id: string; has_tax_id: boolean };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -383,8 +387,23 @@ Deno.serve(async (req) => {
 
   // Also covers a table that belongs to somebody else: the answer is the same
   // null, and so is the refusal. Nothing has been spent at this point.
-  if (!(await resolveRestaurant(tableId, user.id))) {
+  const target = await resolveRestaurant(tableId, user.id);
+
+  if (!target) {
     return json({ error: 'You cannot scan a receipt for that table.' }, 403);
+  }
+
+  // Asked here rather than after the reply, because the answer never changes
+  // during service: without a recorded code every scan at this restaurant is
+  // refused, and paying for each refusal would be paying for a typo.
+  if (!target.has_tax_id) {
+    return json(
+      {
+        error:
+          "This restaurant's fiscal code has not been recorded yet, so receipts here cannot be checked. Ask the owner to add it.",
+      },
+      409
+    );
   }
 
   // base64 carries 3 bytes per 4 characters.
@@ -459,6 +478,17 @@ Deno.serve(async (req) => {
       receipt.merchant?.tax_id ?? '',
       receipt.merchant?.name ?? ''
     );
+
+    if (origin.verdict === 'no_receipt_code') {
+      await recordScan({ ...usage, succeeded: false });
+      return json(
+        {
+          error:
+            'No fiscal code is visible on this photo. That is usually the pre-bill — photograph the fiscal receipt (bonul fiscal) instead.',
+        },
+        409
+      );
+    }
 
     if (origin.verdict === 'mismatch') {
       // Recorded, and recorded as failed: the tokens were spent, and a

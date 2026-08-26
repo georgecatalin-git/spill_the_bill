@@ -10,6 +10,15 @@ import type { Database, Tables, TablesInsert, TablesUpdate } from '@/lib/databas
 
 export type Profile = Tables<'profiles'>;
 export type Restaurant = Tables<'restaurants'>;
+
+/**
+ * A restaurant as the search box returns it: enough to show and to pick.
+ *
+ * Deliberately not the whole row — `restaurants` is no longer readable in one
+ * piece, and the picker never needed the fiscal code or the timestamps.
+ */
+export type RestaurantMatch =
+  Database['public']['Functions']['search_restaurants']['Returns'][number];
 export type TableRow = Tables<'tables'>;
 export type Participant = Tables<'participants'>;
 export type Bill = Tables<'bills'>;

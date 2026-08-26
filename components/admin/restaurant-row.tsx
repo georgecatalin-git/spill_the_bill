@@ -43,12 +43,10 @@ type RestaurantRowProps = {
   /** The other restaurants, as merge destinations. */
   mergeTargets: OwnerRestaurantStat[];
   busy: boolean;
-  onSave: (name: string, city: string, taxId: string, radiusM: number) => Promise<void>;
+  onSave: (name: string, city: string, taxId: string) => Promise<void>;
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
-  /** Records where the restaurant is, from this phone, standing in it. */
-  onCaptureLocation: () => Promise<void>;
 };
 
 /**
@@ -66,7 +64,6 @@ export function RestaurantRow({
   onToggleActive,
   onMerge,
   onDelete,
-  onCaptureLocation,
 }: RestaurantRowProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const success = useThemeColor({}, 'success');
@@ -77,8 +74,7 @@ export function RestaurantRow({
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
   const [taxId, setTaxId] = useState(stat.tax_id ?? '');
-  const [radius, setRadius] = useState(String(stat.radius_m));
-  const [radiusError, setRadiusError] = useState<string>();
+  const [taxIdError, setTaxIdError] = useState<string>();
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
   const [error, setError] = useState<string | null>(null);
@@ -87,9 +83,8 @@ export function RestaurantRow({
     setName(stat.restaurant_name);
     setCity(stat.city);
     setTaxId(stat.tax_id ?? '');
-    setRadius(String(stat.radius_m));
     setNameError(undefined);
-    setRadiusError(undefined);
+    setTaxIdError(undefined);
     setCityError(undefined);
     setError(null);
     setMerging(false);
@@ -110,17 +105,16 @@ export function RestaurantRow({
       return;
     }
 
-    // The database constrains this too; catching it here names the field
-    // instead of returning a check-constraint failure that does not.
-    const radiusM = Number(radius);
-    if (!Number.isInteger(radiusM) || radiusM < 50 || radiusM > 5000) {
-      setRadiusError('Between 50 and 5000 metres.');
+    // Without it no scan here can be checked, and the whole protection is the
+    // fiscal code. Refusing to save is the only thing that keeps that true.
+    if (isBlank(taxId)) {
+      setTaxIdError('Required — without it, receipts here cannot be checked.');
       return;
     }
 
     setError(null);
     try {
-      await onSave(name, city, taxId, radiusM);
+      await onSave(name, city, taxId);
       setEditing(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save the restaurant.');
@@ -151,15 +145,6 @@ export function RestaurantRow({
       await onDelete();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not delete the restaurant.');
-    }
-  }
-
-  async function captureHere() {
-    setError(null);
-    try {
-      await onCaptureLocation();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not save the location.');
     }
   }
 
@@ -217,20 +202,13 @@ export function RestaurantRow({
         <FormField
           label="Fiscal code (CUI)"
           value={taxId}
-          onChangeText={setTaxId}
+          onChangeText={(text) => {
+            setTaxId(text);
+            setTaxIdError(undefined);
+          }}
           placeholder="RO12345678"
           autoCapitalize="characters"
-        />
-        <FormField
-          label="Perimeter (metres)"
-          value={radius}
-          onChangeText={(text) => {
-            setRadius(text);
-            setRadiusError(undefined);
-          }}
-          placeholder="250"
-          keyboardType="number-pad"
-          error={radiusError}
+          error={taxIdError}
         />
 
         {error && (
@@ -255,8 +233,6 @@ export function RestaurantRow({
   // this place stops being comfortably profitable — worth seeing before the
   // month ends rather than on the invoice afterwards.
   const overBudget = stat.scan_cost_micros_this_month / 1e6 / 1.08 > 15;
-
-  const located = stat.latitude !== null && stat.longitude !== null;
 
   const mergeOptions: DropdownOption[] = mergeTargets.map((row) => ({
     value: row.restaurant_id,
@@ -297,20 +273,14 @@ export function RestaurantRow({
           aceasta · {scanCost(stat.scan_cost_micros_this_month)}
           {overBudget ? ' — peste jumătate din abonament' : ''}
         </ThemedText>
-        {/* The one field whose absence has a consequence worth naming: with
-            no code recorded, a receipt from anywhere else scans through. */}
+        {/* The one field whose absence stops the app working here: without a
+            code to compare against, every scan at this restaurant is refused. */}
         {!stat.tax_id && (
           <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
-            No fiscal code — receipts here cannot be checked
+            No fiscal code — receipts here cannot be scanned. Add it.
           </ThemedText>
         )}
-        <ThemedText
-          type="secondary"
-          style={[styles.figure, !located && { color: warning }]}>
-          {located
-            ? `Perimeter ${stat.radius_m} m`
-            : 'No location — a table here can be opened from anywhere'}
-        </ThemedText>
+
       </View>
 
       {error && (
@@ -341,12 +311,6 @@ export function RestaurantRow({
           <Pressable onPress={startEditing} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
               Edit
-            </ThemedText>
-          </Pressable>
-
-          <Pressable onPress={() => void captureHere()} disabled={busy}>
-            <ThemedText type="secondary" style={styles.link}>
-              {located ? 'Update location' : 'Set location here'}
             </ThemedText>
           </Pressable>
 

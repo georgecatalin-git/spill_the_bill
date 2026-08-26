@@ -1,12 +1,13 @@
-import type { OwnerRestaurantStat, Restaurant } from '@/lib/database';
+import type { OwnerRestaurantStat, RestaurantMatch } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 /**
  * The curated list of places Split is sold into, and how much each one uses it.
  *
- * Every admin may read the list — they have to pick from it when starting a
- * table. Writing it, and reading the usage figures, is the owner's alone, and
- * that is enforced in Postgres rather than here.
+ * There is no longer a list to read. An admin types the name of the place they
+ * are in and `search_restaurants` answers; the table itself is no longer
+ * readable in one piece, so signing up no longer hands anybody the customer
+ * list. Writing it, and reading the usage figures, is the owner's alone.
  */
 
 export class RestaurantServiceError extends Error {}
@@ -31,20 +32,20 @@ function toFriendlyError(error: unknown, fallback: string) {
 }
 
 /**
- * The restaurants an admin may start a table at.
+ * Restaurants whose name starts with what the admin typed.
  *
- * Every one the owner has entered and not hidden. Which of them this admin may
- * actually open a table at is decided by where the phone is, not by who the
- * account is — see `prevent_table_outside_restaurant_radius`.
+ * Spelling is free — case, diacritics, punctuation and "SRL" are all folded by
+ * `normalise_business_name` — but the name has to be right. Fewer than three
+ * usable characters returns nothing rather than everything, which is the whole
+ * difference between a search box and a list.
+ *
+ * A place the owner has not entered is simply not found, and without a
+ * restaurant there is no table.
  */
-export async function listActiveRestaurants(): Promise<Restaurant[]> {
-  const { data, error } = await supabase
-    .from('restaurants')
-    .select()
-    .eq('is_active', true)
-    .order('name');
+export async function searchRestaurants(query: string): Promise<RestaurantMatch[]> {
+  const { data, error } = await supabase.rpc('search_restaurants', { p_query: query });
 
-  if (error) throw toFriendlyError(error, 'Could not load the restaurants.');
+  if (error) throw toFriendlyError(error, 'Could not search the restaurants.');
   return data ?? [];
 }
 
@@ -52,11 +53,11 @@ export async function createRestaurant(
   name: string,
   city: string,
   taxId: string
-): Promise<Restaurant> {
+): Promise<RestaurantMatch> {
   const { data, error } = await supabase
     .from('restaurants')
     .insert({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
-    .select()
+    .select('id, name, city')
     .single();
 
   if (error) {
@@ -73,22 +74,16 @@ export async function createRestaurant(
   return data;
 }
 
-/** Corrects a name, a town, the fiscal code or the perimeter. Owner only. */
+/** Corrects a name, a town or the fiscal code. Owner only. */
 export async function updateRestaurant(
   restaurantId: string,
   name: string,
   city: string,
-  taxId: string,
-  radiusM: number
+  taxId: string
 ): Promise<void> {
   const { error } = await supabase
     .from('restaurants')
-    .update({
-      name: name.trim(),
-      city: city.trim(),
-      tax_id: toTaxId(taxId),
-      radius_m: radiusM,
-    })
+    .update({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
     .eq('id', restaurantId);
 
   if (error) {
@@ -119,25 +114,6 @@ export async function mergeRestaurants(sourceId: string, targetId: string): Prom
     }
     throw toFriendlyError(error, 'Could not merge the restaurants.');
   }
-}
-
-/**
- * Records where the restaurant is, from the phone doing the recording.
- *
- * Meant to be pressed while standing in the place, which is the only reading
- * worth having — and the reason no geocoding service is involved. The owner
- * meets every restaurant in person anyway.
- */
-export async function setRestaurantLocation(
-  restaurantId: string,
-  position: { latitude: number; longitude: number }
-): Promise<void> {
-  const { error } = await supabase
-    .from('restaurants')
-    .update({ latitude: position.latitude, longitude: position.longitude })
-    .eq('id', restaurantId);
-
-  if (error) throw toFriendlyError(error, 'Could not save the location.');
 }
 
 /** Takes a restaurant out of the picker without losing the tables behind it. */

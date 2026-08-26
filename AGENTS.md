@@ -126,7 +126,9 @@ Migrations are the source of truth and are applied in order:
 | `20260826360000_restaurants_have_admins` | assignment per account — superseded, see the next but one |
 | `20260826380000_the_receipt_names_its_own_restaurant` | the fiscal code on the receipt is checked against the restaurant |
 | `20260826400000_the_receipt_may_only_have_a_name` | the name as fallback, when the paper is a pre-bill and carries no code |
-| `20260826420000_a_table_is_opened_where_the_restaurant_is` | assignment out, perimeter in: the phone must be near the restaurant |
+| `20260826420000_a_table_is_opened_where_the_restaurant_is` | assignment out, perimeter in — both later removed, see below |
+| `20260826440000_search_by_name_and_demand_the_code` | perimeter out; the picker becomes a search box and the fiscal code becomes required |
+| `20260826460000_a_restaurant_without_a_code_cannot_scan` | the missing-code refusal moves before the API call |
 
 Regenerate types after any schema change:
 
@@ -522,55 +524,59 @@ restaurant in person anyway.
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
 
-## A table is opened where the restaurant is
+## Typed, not listed — and no scan without the code
 
-Sign-up is open, and every admin sees every restaurant the owner has entered.
-What stops an admin sitting in Panoramic from opening a table at Italien is not
-who they are — it is **where the phone says it is**.
+Two attempts at "may this person open a table here" were built and removed on
+the same day. Both are worth knowing about, because the reasons they failed are
+the reasons the current shape looks the way it does.
 
-`restaurants.latitude`/`longitude` hold the position, and
-`prevent_table_outside_restaurant_radius` refuses an INSERT whose reported
-position is further than `radius_m` from it.
+**Per-account assignment** (`restaurant_admins`) let the owner grant each
+account access to each restaurant. It worked. It was a full-time job at five
+hundred restaurants, and it still could not stop an assigned admin from opening
+a table somewhere else.
 
-**Read this before trusting it.** The coordinates are reported by the client.
-Postgres receives two numbers and cannot check them; anyone willing to call the
-API directly sends whatever they like. This is a **guard rail, not a
-boundary** — the one rule in this schema that does not own its own truth, and
-it is written that way in the trigger's own comment so nobody later mistakes it
-for a defence. It works because the case it exists for is an honest person
-tapping a picker, not an attacker crafting requests. The boundary for money is
-still `check_scan_receipt`, which reads the restaurant off the photo,
-server-side, where the client cannot reach.
+**A location perimeter** checked the phone's position against coordinates
+captured on site. It answered the right question — and it could only be
+switched on by standing in the restaurant. For a client in Arad, six hundred
+kilometres away, that is a car journey to configure a checkbox. A control you
+cannot enable remotely is not a control.
 
-The position is **captured on site**, not typed and not geocoded: the owner
-presses "Set location here" standing in the restaurant, which is the only
-reading worth having and keeps any address service out of it. `radius_m`
-defaults to 250 and is per restaurant, because the honest failure is a weak
-indoor fix — a basement or a shopping centre needs more room than a terrace.
-Letting the table next door through is a far smaller problem than refusing a
-waiter standing at their own bar.
+What is there now is deliberately modest about what it proves.
 
-Two absences, treated deliberately differently:
+**The picker is a search box.** `search_restaurants` matches on
+`normalise_business_name`, so case, diacritics, punctuation and "SC … SRL" are
+all free — "SUB TÂMPA", "sub tampa" and "SC Sub Tampa SRL" all reach the same
+row — but the name has to be right. Prefix match from three characters, ten
+results at most.
 
-- **No coordinates recorded** → every table is allowed. Same rule the receipt
-  check follows: a rule that fires on missing *records* punishes the honest,
-  who are the ones standing at the table.
-- **No reading from the device**, once the restaurant has coordinates →
-  refused. Otherwise denying the location permission would be the way around
-  it, and everyone would know that within a week.
+This is **not** a security measure and must not be described as one: typing
+"Italien" is exactly as easy as choosing it from a list. It buys two other
+things. The customer list stops being readable in one piece — the `restaurants`
+SELECT policy is no longer `using (true)`, only the owner and
+`admin_has_table_at` see rows — and a name box still works at five hundred
+restaurants where a dropdown does not.
 
-The owner is exempt: they demo wherever the meeting happens, and they pay for
-the calls either way. `tables.opened_lat`/`opened_lng` keep the reading, so a
-figure that looks wrong later has an explanation attached.
+**The fiscal code is the rule.** It is the one witness the client cannot
+report: it is read off the photo, on the server. So it is now required on both
+sides.
 
-**What was tried first and removed:** `restaurant_admins`, a table of which
-account may open tables at which restaurant, assigned by the owner. It worked,
-and it was the wrong question — at two restaurants it is nothing, at five
-hundred it is a full-time job, and it still could not stop an assigned admin
-from opening a table somewhere else. Migration
-`20260826420000_a_table_is_opened_where_the_restaurant_is` takes it back out.
-Do not reintroduce per-account assignment without a reason that answers the
-"where", because that is the question.
+- The restaurant must have `tax_id` recorded. The owner's Add and Edit forms
+  refuse to save without it, and `resolve_scan_restaurant` reports whether it
+  is there — asked **before** the API call, because the answer never changes
+  during service and paying for each refusal would be paying for a typo.
+- The photo must show a code. `no_receipt_code` says so in the way that helps:
+  no code visible usually means the *nota de plată*, so ask for the *bon
+  fiscal*.
+
+The name survives only as a supporting witness: it can still convict a receipt
+that names a different known restaurant, but its absence never refuses.
+
+**Know what this costs before changing it.** Requiring the code means a genuine
+receipt photographed badly is refused until retaken, and it means the pre-bill
+cannot be used at all. If a restaurant's *nota de plată* does print its CUI,
+none of that bites; if it does not, splitting can only happen once the fiscal
+receipt is out. That is a question about paper, answerable only in the
+restaurant, and it is the first thing to check before loosening this rule.
 
 ## What a restaurant costs to serve
 

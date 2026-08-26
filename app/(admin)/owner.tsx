@@ -20,13 +20,11 @@ import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getCurrentPosition } from '@/lib/location';
 import {
   createRestaurant,
   deleteRestaurant,
   mergeRestaurants,
   setRestaurantActive,
-  setRestaurantLocation,
   updateRestaurant,
 } from '@/lib/services/restaurant-service';
 import { useOwnerStats } from '@/lib/services/use-owner-stats';
@@ -46,6 +44,7 @@ export default function OwnerScreen() {
   const [taxId, setTaxId] = useState('');
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
+  const [taxIdError, setTaxIdError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -60,6 +59,13 @@ export default function OwnerScreen() {
     // what makes a restaurant unique — so it is not optional.
     if (isBlank(city)) {
       setCityError('Please say which town this one is in.');
+      return;
+    }
+
+    // Not optional: the fiscal code is the whole check. A restaurant added
+    // without one cannot have a single receipt scanned at it.
+    if (isBlank(taxId)) {
+      setTaxIdError('Required — it is what a scanned receipt is checked against.');
       return;
     }
 
@@ -200,15 +206,9 @@ export default function OwnerScreen() {
                   stat={stat}
                   mergeTargets={stats.filter((row) => row.restaurant_id !== stat.restaurant_id)}
                   busy={busyId === stat.restaurant_id}
-                  onSave={(nextName, nextCity, nextTaxId, nextRadius) =>
+                  onSave={(nextName, nextCity, nextTaxId) =>
                     runOn(stat.restaurant_id, () =>
-                      updateRestaurant(
-                        stat.restaurant_id,
-                        nextName,
-                        nextCity,
-                        nextTaxId,
-                        nextRadius
-                      )
+                      updateRestaurant(stat.restaurant_id, nextName, nextCity, nextTaxId)
                     )
                   }
                   onToggleActive={() =>
@@ -221,13 +221,6 @@ export default function OwnerScreen() {
                   }
                   onDelete={() =>
                     runOn(stat.restaurant_id, () => deleteRestaurant(stat.restaurant_id))
-                  }
-                  // Pressed while standing in the restaurant: the reading is
-                  // this phone's, which is the only one worth recording.
-                  onCaptureLocation={() =>
-                    runOn(stat.restaurant_id, async () =>
-                      setRestaurantLocation(stat.restaurant_id, await getCurrentPosition())
-                    )
                   }
                 />
               ))}
@@ -269,9 +262,13 @@ export default function OwnerScreen() {
                 <FormField
                   label="Fiscal code (CUI)"
                   value={taxId}
-                  onChangeText={setTaxId}
+                  onChangeText={(text) => {
+                    setTaxId(text);
+                    setTaxIdError(undefined);
+                  }}
                   placeholder="RO12345678"
                   autoCapitalize="characters"
+                  error={taxIdError}
                 />
 
                 {formError && (

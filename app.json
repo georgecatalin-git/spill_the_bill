@@ -40,15 +40,6 @@
         }
       ],
       [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Allow Split to use your location to confirm you are at the restaurant.",
-          "locationWhenInUsePermission": "Allow Split to use your location to confirm you are at the restaurant.",
-          "isIosBackgroundLocationEnabled": false,
-          "isAndroidBackgroundLocationEnabled": false
-        }
-      ],
-      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

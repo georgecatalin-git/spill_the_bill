@@ -408,10 +408,7 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
-          latitude: number | null
-          longitude: number | null
           name: string
-          radius_m: number
           tax_id: string | null
           updated_at: string
         }
@@ -420,10 +417,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
-          latitude?: number | null
-          longitude?: number | null
           name: string
-          radius_m?: number
           tax_id?: string | null
           updated_at?: string
         }
@@ -432,10 +426,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
-          latitude?: number | null
-          longitude?: number | null
           name?: string
-          radius_m?: number
           tax_id?: string | null
           updated_at?: string
         }
@@ -448,8 +439,6 @@ export type Database = {
           id: string
           invite_code: string
           name: string
-          opened_lat: number | null
-          opened_lng: number | null
           restaurant_id: string
           status: string
           updated_at: string
@@ -460,8 +449,6 @@ export type Database = {
           id?: string
           invite_code?: string
           name: string
-          opened_lat?: number | null
-          opened_lng?: number | null
           restaurant_id: string
           status?: string
           updated_at?: string
@@ -472,8 +459,6 @@ export type Database = {
           id?: string
           invite_code?: string
           name?: string
-          opened_lat?: number | null
-          opened_lng?: number | null
           restaurant_id?: string
           status?: string
           updated_at?: string
@@ -895,6 +880,10 @@ export type Database = {
           new_quantity: number
         }[]
       }
+      admin_has_table_at: {
+        Args: { p_restaurant_id: string }
+        Returns: boolean
+      }
       apply_assignment_status: {
         Args: { p_bill_id: string }
         Returns: undefined
@@ -962,10 +951,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      distance_meters: {
-        Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
-        Returns: number
       }
       generate_invite_code: { Args: { p_length?: number }; Returns: string }
       generate_session_token: { Args: never; Returns: string }
@@ -1159,7 +1144,6 @@ export type Database = {
           latitude: number
           longitude: number
           participants_total: number
-          radius_m: number
           restaurant_id: string
           restaurant_name: string
           scan_cost_micros_this_month: number
@@ -1210,6 +1194,14 @@ export type Database = {
       resolve_scan_restaurant: {
         Args: { p_admin_id: string; p_table_id: string }
         Returns: string
+      }
+      search_restaurants: {
+        Args: { p_query: string }
+        Returns: {
+          city: string
+          id: string
+          name: string
+        }[]
       }
       set_bill_split_mode: {
         Args: {
