@@ -9,9 +9,17 @@ import {
 } from 'react';
 
 import { AuthError, authService, type AuthUser } from '@/lib/auth';
+import type { ProfileRole } from '@/lib/database';
+import { getProfile } from '@/lib/services/profile-service';
 
 type AuthContextValue = {
   user: AuthUser | null;
+  /**
+   * What this account is allowed to be. Read from the profile row, and
+   * `admin` until proven otherwise — a failed read must never hand out the
+   * owner area. The database refuses owner reads regardless of this value.
+   */
+  role: ProfileRole;
   /** True while the stored session is being restored on launch. */
   restoring: boolean;
   pending: boolean;
@@ -33,6 +41,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [role, setRole] = useState<ProfileRole>('admin');
   const [restoring, setRestoring] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +66,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribe();
     };
   }, []);
+
+  // The role lives on the profile row, not in the auth session, so it is
+  // fetched separately whenever the signed-in account changes.
+  useEffect(() => {
+    if (!user) {
+      setRole('admin');
+      return;
+    }
+
+    let cancelled = false;
+
+    getProfile()
+      .then((profile) => {
+        if (!cancelled) setRole(profile?.role === 'owner' ? 'owner' : 'admin');
+      })
+      .catch(() => {
+        // Staying an admin is the harmless direction to fail.
+        if (!cancelled) setRole('admin');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const run = useCallback(async (action: () => Promise<AuthUser>) => {
     setPending(true);
@@ -117,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user,
+      role,
       restoring,
       pending,
       error,
@@ -126,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       clearError,
     }),
-    [user, restoring, pending, error, signIn, signUp, signOut, resetPassword, clearError]
+    [user, role, restoring, pending, error, signIn, signUp, signOut, resetPassword, clearError]
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

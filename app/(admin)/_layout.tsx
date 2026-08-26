@@ -8,7 +8,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useOnboarding } from '@/providers/onboarding-provider';
 
 export default function AdminLayout() {
-  const { user, restoring } = useAuth();
+  const { user, role, restoring } = useAuth();
   const { shouldAutoStart, claimAutoStart } = useOnboarding();
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -53,6 +53,19 @@ export default function AdminLayout() {
         options={{
           title: 'Tables',
           tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="owner"
+        options={{
+          title: 'Owner',
+          // `href: null` keeps the route registered but out of the tab bar, so
+          // an admin never sees it. The screen redirects too, and the database
+          // refuses the reads regardless.
+          href: role === 'owner' ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="stats-chart-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen
