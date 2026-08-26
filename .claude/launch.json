@@ -23,6 +23,18 @@
         "8081"
       ],
       "port": 8081
+    },
+    {
+      "name": "expo-lan",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "expo",
+        "start",
+        "-c",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
     }
   ]
 }

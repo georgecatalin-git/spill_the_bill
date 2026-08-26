@@ -402,46 +402,16 @@ export type Database = {
           },
         ]
       }
-      restaurant_admins: {
-        Row: {
-          admin_id: string
-          created_at: string
-          restaurant_id: string
-        }
-        Insert: {
-          admin_id: string
-          created_at?: string
-          restaurant_id: string
-        }
-        Update: {
-          admin_id?: string
-          created_at?: string
-          restaurant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "restaurant_admins_admin_id_fkey"
-            columns: ["admin_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "restaurant_admins_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       restaurants: {
         Row: {
           city: string
           created_at: string
           id: string
           is_active: boolean
+          latitude: number | null
+          longitude: number | null
           name: string
+          radius_m: number
           tax_id: string | null
           updated_at: string
         }
@@ -450,7 +420,10 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
           name: string
+          radius_m?: number
           tax_id?: string | null
           updated_at?: string
         }
@@ -459,7 +432,10 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
           name?: string
+          radius_m?: number
           tax_id?: string | null
           updated_at?: string
         }
@@ -472,6 +448,8 @@ export type Database = {
           id: string
           invite_code: string
           name: string
+          opened_lat: number | null
+          opened_lng: number | null
           restaurant_id: string
           status: string
           updated_at: string
@@ -482,6 +460,8 @@ export type Database = {
           id?: string
           invite_code?: string
           name: string
+          opened_lat?: number | null
+          opened_lng?: number | null
           restaurant_id: string
           status?: string
           updated_at?: string
@@ -492,6 +472,8 @@ export type Database = {
           id?: string
           invite_code?: string
           name?: string
+          opened_lat?: number | null
+          opened_lng?: number | null
           restaurant_id?: string
           status?: string
           updated_at?: string
@@ -894,14 +876,6 @@ export type Database = {
           new_quantity: number
         }[]
       }
-      admin_has_table_at: {
-        Args: { p_restaurant_id: string }
-        Returns: boolean
-      }
-      admin_may_use_restaurant: {
-        Args: { p_restaurant_id: string }
-        Returns: boolean
-      }
       admin_set_participant_claim: {
         Args: {
           p_bill_item_id: string
@@ -988,6 +962,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      distance_meters: {
+        Args: { p_lat1: number; p_lat2: number; p_lng1: number; p_lng2: number }
+        Returns: number
       }
       generate_invite_code: { Args: { p_length?: number }; Returns: string }
       generate_session_token: { Args: never; Returns: string }
@@ -1140,24 +1118,6 @@ export type Database = {
         }[]
       }
       leave_table: { Args: { p_session_token: string }; Returns: undefined }
-      list_my_restaurants: {
-        Args: never
-        Returns: {
-          city: string
-          created_at: string
-          id: string
-          is_active: boolean
-          name: string
-          tax_id: string | null
-          updated_at: string
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "restaurants"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
       lock_admin_claimable_item: {
         Args: { p_bill_item_id: string; p_require_open?: boolean }
         Returns: {
@@ -1181,23 +1141,9 @@ export type Database = {
       }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
       normalise_tax_id: { Args: { p_value: string }; Returns: string }
-      owner_assign_restaurant: {
-        Args: { p_admin_id: string; p_restaurant_id: string }
-        Returns: undefined
-      }
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string }
         Returns: undefined
-      }
-      owner_list_admins: {
-        Args: never
-        Returns: {
-          admin_id: string
-          email: string
-          full_name: string
-          restaurant_ids: string[]
-          role: string
-        }[]
       }
       owner_merge_restaurants: {
         Args: { p_source: string; p_target: string }
@@ -1210,7 +1156,10 @@ export type Database = {
           city: string
           is_active: boolean
           last_activity_at: string
+          latitude: number
+          longitude: number
           participants_total: number
+          radius_m: number
           restaurant_id: string
           restaurant_name: string
           scan_cost_micros_this_month: number
@@ -1219,10 +1168,6 @@ export type Database = {
           tables_total: number
           tax_id: string
         }[]
-      }
-      owner_revoke_restaurant: {
-        Args: { p_admin_id: string; p_restaurant_id: string }
-        Returns: undefined
       }
       owns_receipt_object: { Args: { p_object_name: string }; Returns: boolean }
       record_receipt_scan: {

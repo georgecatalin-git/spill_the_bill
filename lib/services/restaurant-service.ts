@@ -1,13 +1,12 @@
-import type { AdminAccount, OwnerRestaurantStat, Restaurant } from '@/lib/database';
+import type { OwnerRestaurantStat, Restaurant } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 /**
  * The curated list of places Split is sold into, and how much each one uses it.
  *
- * An admin reads the restaurants they have been given access to, and no more.
- * Writing the list, reading the usage figures and handing access out are the
- * owner's alone, and every one of those is enforced in Postgres rather than
- * here.
+ * Every admin may read the list — they have to pick from it when starting a
+ * table. Writing it, and reading the usage figures, is the owner's alone, and
+ * that is enforced in Postgres rather than here.
  */
 
 export class RestaurantServiceError extends Error {}
@@ -32,17 +31,18 @@ function toFriendlyError(error: unknown, fallback: string) {
 }
 
 /**
- * The restaurants an admin may start a table at: assigned to them, and still
- * active.
+ * The restaurants an admin may start a table at.
  *
- * Both conditions live in `list_my_restaurants` rather than in a filter here,
- * so the picker cannot drift away from what the two triggers on `tables`
- * actually allow — `prevent_table_at_unassigned_restaurant` and
- * `prevent_table_at_inactive_restaurant`. An account nobody has given access
- * to gets an empty list, which is the point.
+ * Every one the owner has entered and not hidden. Which of them this admin may
+ * actually open a table at is decided by where the phone is, not by who the
+ * account is — see `prevent_table_outside_restaurant_radius`.
  */
 export async function listActiveRestaurants(): Promise<Restaurant[]> {
-  const { data, error } = await supabase.rpc('list_my_restaurants');
+  const { data, error } = await supabase
+    .from('restaurants')
+    .select()
+    .eq('is_active', true)
+    .order('name');
 
   if (error) throw toFriendlyError(error, 'Could not load the restaurants.');
   return data ?? [];
@@ -73,16 +73,22 @@ export async function createRestaurant(
   return data;
 }
 
-/** Corrects a name, a town or the fiscal code. Owner only — RLS refuses everyone else. */
+/** Corrects a name, a town, the fiscal code or the perimeter. Owner only. */
 export async function updateRestaurant(
   restaurantId: string,
   name: string,
   city: string,
-  taxId: string
+  taxId: string,
+  radiusM: number
 ): Promise<void> {
   const { error } = await supabase
     .from('restaurants')
-    .update({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
+    .update({
+      name: name.trim(),
+      city: city.trim(),
+      tax_id: toTaxId(taxId),
+      radius_m: radiusM,
+    })
     .eq('id', restaurantId);
 
   if (error) {
@@ -113,6 +119,25 @@ export async function mergeRestaurants(sourceId: string, targetId: string): Prom
     }
     throw toFriendlyError(error, 'Could not merge the restaurants.');
   }
+}
+
+/**
+ * Records where the restaurant is, from the phone doing the recording.
+ *
+ * Meant to be pressed while standing in the place, which is the only reading
+ * worth having — and the reason no geocoding service is involved. The owner
+ * meets every restaurant in person anyway.
+ */
+export async function setRestaurantLocation(
+  restaurantId: string,
+  position: { latitude: number; longitude: number }
+): Promise<void> {
+  const { error } = await supabase
+    .from('restaurants')
+    .update({ latitude: position.latitude, longitude: position.longitude })
+    .eq('id', restaurantId);
+
+  if (error) throw toFriendlyError(error, 'Could not save the location.');
 }
 
 /** Takes a restaurant out of the picker without losing the tables behind it. */
@@ -164,64 +189,4 @@ export async function getOwnerRestaurantStats(): Promise<OwnerRestaurantStat[]> 
     throw toFriendlyError(error, 'Could not load the usage figures.');
   }
   return data ?? [];
-}
-
-/**
- * Every admin account, with the restaurants it has been given.
- *
- * Owner only. `profiles` is restricted to `id = auth.uid()` by RLS, so this
- * has to be a definer function — there is no query the owner could write that
- * would see another account.
- */
-export async function listAdminAccounts(): Promise<AdminAccount[]> {
-  const { data, error } = await supabase.rpc('owner_list_admins');
-
-  if (error) {
-    if (error.message.includes('Only the owner')) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not load the accounts.');
-  }
-  return data ?? [];
-}
-
-/** Lets one account open tables at one restaurant. Owner only. */
-export async function assignRestaurant(
-  restaurantId: string,
-  adminId: string
-): Promise<void> {
-  const { error } = await supabase.rpc('owner_assign_restaurant', {
-    p_restaurant_id: restaurantId,
-    p_admin_id: adminId,
-  });
-
-  if (error) {
-    if (error.message.includes('Only the owner')) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not give access.');
-  }
-}
-
-/**
- * Takes that access away again.
- *
- * Tables the account already opened keep working — the refusal is on INSERT
- * only — so this never breaks a dinner that is under way.
- */
-export async function revokeRestaurant(
-  restaurantId: string,
-  adminId: string
-): Promise<void> {
-  const { error } = await supabase.rpc('owner_revoke_restaurant', {
-    p_restaurant_id: restaurantId,
-    p_admin_id: adminId,
-  });
-
-  if (error) {
-    if (error.message.includes('Only the owner')) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not take access away.');
-  }
 }

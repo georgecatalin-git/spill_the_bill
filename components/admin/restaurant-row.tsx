@@ -9,7 +9,7 @@ import { FormField } from '@/components/ui/form-field';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
-import type { AdminAccount, OwnerRestaurantStat } from '@/lib/database';
+import type { OwnerRestaurantStat } from '@/lib/database';
 import { isBlank } from '@/lib/validation';
 
 /**
@@ -42,15 +42,13 @@ type RestaurantRowProps = {
   stat: OwnerRestaurantStat;
   /** The other restaurants, as merge destinations. */
   mergeTargets: OwnerRestaurantStat[];
-  /** Every admin account, so access can be handed out without leaving the card. */
-  accounts: AdminAccount[];
   busy: boolean;
-  onSave: (name: string, city: string, taxId: string) => Promise<void>;
+  onSave: (name: string, city: string, taxId: string, radiusM: number) => Promise<void>;
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
-  onGrant: (adminId: string) => Promise<void>;
-  onRevoke: (adminId: string) => Promise<void>;
+  /** Records where the restaurant is, from this phone, standing in it. */
+  onCaptureLocation: () => Promise<void>;
 };
 
 /**
@@ -63,14 +61,12 @@ type RestaurantRowProps = {
 export function RestaurantRow({
   stat,
   mergeTargets,
-  accounts,
   busy,
   onSave,
   onToggleActive,
   onMerge,
   onDelete,
-  onGrant,
-  onRevoke,
+  onCaptureLocation,
 }: RestaurantRowProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const success = useThemeColor({}, 'success');
@@ -78,10 +74,11 @@ export function RestaurantRow({
 
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
-  const [showingAccess, setShowingAccess] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
   const [taxId, setTaxId] = useState(stat.tax_id ?? '');
+  const [radius, setRadius] = useState(String(stat.radius_m));
+  const [radiusError, setRadiusError] = useState<string>();
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
   const [error, setError] = useState<string | null>(null);
@@ -90,11 +87,12 @@ export function RestaurantRow({
     setName(stat.restaurant_name);
     setCity(stat.city);
     setTaxId(stat.tax_id ?? '');
+    setRadius(String(stat.radius_m));
     setNameError(undefined);
+    setRadiusError(undefined);
     setCityError(undefined);
     setError(null);
     setMerging(false);
-    setShowingAccess(false);
     setEditing(true);
   }
 
@@ -112,9 +110,17 @@ export function RestaurantRow({
       return;
     }
 
+    // The database constrains this too; catching it here names the field
+    // instead of returning a check-constraint failure that does not.
+    const radiusM = Number(radius);
+    if (!Number.isInteger(radiusM) || radiusM < 50 || radiusM > 5000) {
+      setRadiusError('Between 50 and 5000 metres.');
+      return;
+    }
+
     setError(null);
     try {
-      await onSave(name, city, taxId);
+      await onSave(name, city, taxId, radiusM);
       setEditing(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save the restaurant.');
@@ -148,15 +154,12 @@ export function RestaurantRow({
     }
   }
 
-  async function toggleAccess(account: AdminAccount, hasAccess: boolean) {
-    // Taking access away does not ask for confirmation: it breaks nothing that
-    // is already running — the refusal is on new tables only — and giving it
-    // back is one tap on this same list.
+  async function captureHere() {
     setError(null);
     try {
-      await (hasAccess ? onRevoke(account.admin_id) : onGrant(account.admin_id));
+      await onCaptureLocation();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not change access.');
+      setError(caught instanceof Error ? caught.message : 'Could not save the location.');
     }
   }
 
@@ -218,6 +221,17 @@ export function RestaurantRow({
           placeholder="RO12345678"
           autoCapitalize="characters"
         />
+        <FormField
+          label="Perimeter (metres)"
+          value={radius}
+          onChangeText={(text) => {
+            setRadius(text);
+            setRadiusError(undefined);
+          }}
+          placeholder="250"
+          keyboardType="number-pad"
+          error={radiusError}
+        />
 
         {error && (
           <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
@@ -242,12 +256,7 @@ export function RestaurantRow({
   // month ends rather than on the invoice afterwards.
   const overBudget = stat.scan_cost_micros_this_month / 1e6 / 1.08 > 15;
 
-  // The owner reaches every restaurant through `is_owner()`, so listing their
-  // own account here would offer a toggle that changes nothing.
-  const grantable = accounts.filter((account) => account.role !== 'owner');
-  const assigned = grantable.filter((account) =>
-    (account.restaurant_ids ?? []).includes(stat.restaurant_id)
-  );
+  const located = stat.latitude !== null && stat.longitude !== null;
 
   const mergeOptions: DropdownOption[] = mergeTargets.map((row) => ({
     value: row.restaurant_id,
@@ -297,10 +306,10 @@ export function RestaurantRow({
         )}
         <ThemedText
           type="secondary"
-          style={[styles.figure, assigned.length === 0 && { color: warning }]}>
-          {assigned.length === 0
-            ? 'Nobody can open a table here yet'
-            : `${assigned.length} ${assigned.length === 1 ? 'account has' : 'accounts have'} access`}
+          style={[styles.figure, !located && { color: warning }]}>
+          {located
+            ? `Perimeter ${stat.radius_m} m`
+            : 'No location — a table here can be opened from anywhere'}
         </ThemedText>
       </View>
 
@@ -308,51 +317,6 @@ export function RestaurantRow({
         <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
           {error}
         </ThemedText>
-      )}
-
-      {showingAccess && (
-        <View style={styles.accessBox}>
-          <ThemedText type="secondary" style={styles.figure}>
-            Who may open tables here:
-          </ThemedText>
-
-          {grantable.length === 0 ? (
-            <ThemedText type="secondary" style={styles.figure}>
-              No admin accounts have signed up yet.
-            </ThemedText>
-          ) : (
-            grantable.map((account) => {
-              const hasAccess = (account.restaurant_ids ?? []).includes(stat.restaurant_id);
-
-              return (
-                <View key={account.admin_id} style={styles.accessRow}>
-                  <View style={styles.accessWho}>
-                    <ThemedText style={styles.accessName}>
-                      {account.full_name ?? account.email}
-                    </ThemedText>
-                    <ThemedText type="secondary" style={styles.figure}>
-                      {account.email}
-                    </ThemedText>
-                  </View>
-
-                  <Pressable onPress={() => void toggleAccess(account, hasAccess)} disabled={busy}>
-                    <ThemedText
-                      type="secondary"
-                      style={[styles.link, hasAccess ? { color: warning } : { color: success }]}>
-                      {hasAccess ? 'Remove' : 'Give access'}
-                    </ThemedText>
-                  </Pressable>
-                </View>
-              );
-            })
-          )}
-
-          <Pressable onPress={() => setShowingAccess(false)}>
-            <ThemedText type="secondary" style={styles.link}>
-              Done
-            </ThemedText>
-          </Pressable>
-        </View>
       )}
 
       {merging ? (
@@ -380,9 +344,9 @@ export function RestaurantRow({
             </ThemedText>
           </Pressable>
 
-          <Pressable onPress={() => setShowingAccess((open) => !open)} disabled={busy}>
+          <Pressable onPress={() => void captureHere()} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
-              Access
+              {located ? 'Update location' : 'Set location here'}
             </ThemedText>
           </Pressable>
 
@@ -450,23 +414,6 @@ const styles = StyleSheet.create({
   },
   mergeBox: {
     gap: Spacing.sm,
-  },
-  accessBox: {
-    gap: Spacing.sm,
-  },
-  accessRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-  accessWho: {
-    flex: 1,
-    gap: 2,
-  },
-  accessName: {
-    fontSize: 14,
-    lineHeight: 19,
   },
   editActions: {
     flexDirection: 'row',

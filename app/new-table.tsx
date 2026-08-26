@@ -11,6 +11,7 @@ import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { LocationError, getCurrentPosition } from '@/lib/location';
 import { createTable, ensureAdminParticipant } from '@/lib/services/table-service';
 import { useRestaurants } from '@/lib/services/use-restaurants';
 import { isBlank } from '@/lib/validation';
@@ -50,7 +51,13 @@ export default function NewTableScreen() {
     setSubmitError(null);
     setPending(true);
     try {
-      const table = await createTable(name, restaurantId);
+      // The owner opens tables wherever the meeting happens, so they are never
+      // asked. Everyone else is: the database refuses a table opened away from
+      // the restaurant it names, and asking here turns that refusal into a
+      // permission prompt rather than an error after the fact.
+      const position = role === 'owner' ? null : await getCurrentPosition();
+
+      const table = await createTable(name, restaurantId, position);
       await ensureAdminParticipant(table.id, hostName);
 
       router.replace({
@@ -63,7 +70,13 @@ export default function NewTableScreen() {
         },
       });
     } catch (caught) {
-      setSubmitError(caught instanceof Error ? caught.message : 'Could not create the table.');
+      // Both LocationError and TableServiceError are already written for the
+      // person holding the phone, and each says what to do next.
+      setSubmitError(
+        caught instanceof LocationError || caught instanceof Error
+          ? caught.message
+          : 'Could not create the table.'
+      );
     } finally {
       setPending(false);
     }

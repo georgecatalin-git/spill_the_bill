@@ -123,9 +123,10 @@ Migrations are the source of truth and are applied in order:
 | `20260826300000_share_the_rest_by_value` | the same, but divided by value rather than by the piece |
 | `20260826320000_host_assigns_items` | the host records orders for people who have no app |
 | `20260826340000_remaining_excludes_the_tip` | "remaining" stops counting the tip as unowned |
-| `20260826360000_restaurants_have_admins` | only an account the owner has assigned may open tables at a restaurant |
+| `20260826360000_restaurants_have_admins` | assignment per account — superseded, see the next but one |
 | `20260826380000_the_receipt_names_its_own_restaurant` | the fiscal code on the receipt is checked against the restaurant |
 | `20260826400000_the_receipt_may_only_have_a_name` | the name as fallback, when the paper is a pre-bill and carries no code |
+| `20260826420000_a_table_is_opened_where_the_restaurant_is` | assignment out, perimeter in: the phone must be near the restaurant |
 
 Regenerate types after any schema change:
 
@@ -521,54 +522,55 @@ restaurant in person anyway.
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
 
-## A restaurant has admins
+## A table is opened where the restaurant is
 
-Nothing tied an account to a restaurant, and sign-up is open. So anyone who
-could reach the sign-up screen could pick any restaurant on the list, start a
-table and scan receipts — uncapped spending on the one part of Split that costs
-money per use, landing on the usage figures of a place that had nothing to do
-with it. The number the owner area exists to make trustworthy was the number
-being falsified.
+Sign-up is open, and every admin sees every restaurant the owner has entered.
+What stops an admin sitting in Panoramic from opening a table at Italien is not
+who they are — it is **where the phone says it is**.
 
-`restaurant_admins` is the missing sentence: this account may open tables at
-that restaurant. The owner writes it from the restaurant's own card when the
-contract is signed.
+`restaurants.latitude`/`longitude` hold the position, and
+`prevent_table_outside_restaurant_radius` refuses an INSERT whose reported
+position is further than `radius_m` from it.
 
-**Sign-up stays open.** The account should be *useless* until assigned, not
-impossible to create — a prospect makes one during the demo, and assignment is
-what signing the contract does. Rejected: geofencing, which is fragile indoors,
-invasive, trivially defeated, and annoys paying customers to catch one who will
-find another way.
+**Read this before trusting it.** The coordinates are reported by the client.
+Postgres receives two numbers and cannot check them; anyone willing to call the
+API directly sends whatever they like. This is a **guard rail, not a
+boundary** — the one rule in this schema that does not own its own truth, and
+it is written that way in the trigger's own comment so nobody later mistakes it
+for a defence. It works because the case it exists for is an honest person
+tapping a picker, not an attacker crafting requests. The boundary for money is
+still `check_scan_receipt`, which reads the restaurant off the photo,
+server-side, where the client cannot reach.
 
-Three things follow, and only the second protects anything:
+The position is **captured on site**, not typed and not geocoded: the owner
+presses "Set location here" standing in the restaurant, which is the only
+reading worth having and keeps any address service out of it. `radius_m`
+defaults to 250 and is per restaurant, because the honest failure is a weak
+indoor fix — a basement or a shopping centre needs more room than a terrace.
+Letting the table next door through is a far smaller problem than refusing a
+waiter standing at their own bar.
 
-- `list_my_restaurants` is what the picker asks. Assignment **and** `is_active`,
-  in one function rather than a filter in the service, so the picker cannot
-  drift away from what the triggers allow.
-- `prevent_table_at_unassigned_restaurant` refuses the row. Separate from
-  `prevent_table_at_inactive_restaurant` rather than folded into it: they refuse
-  for different reasons and the person reading the error should be told which.
-  Both are INSERT only, so withdrawing access never breaks a dinner already
-  under way.
-- Reading the list stops being `using (true)`. The names and towns of the
-  places paying for Split are not a security matter, but they are not a
-  stranger's business either.
+Two absences, treated deliberately differently:
 
-The read policy deliberately admits one case the trigger does not:
-`admin_has_table_at`. An admin whose access is withdrawn keeps *reading* the
-restaurant behind their old tables, because `admin_table_summaries` joins it and
-their whole history would otherwise vanish from the dashboard. It grants nothing
-new — if having a table there counted as permission, revoking access would be
-undone by the first table the admin ever created.
+- **No coordinates recorded** → every table is allowed. Same rule the receipt
+  check follows: a rule that fires on missing *records* punishes the honest,
+  who are the ones standing at the table.
+- **No reading from the device**, once the restaurant has coordinates →
+  refused. Otherwise denying the location permission would be the way around
+  it, and everyone would know that within a week.
 
-**The owner is exempt throughout.** They pay for the API calls and they run the
-demos; making them assign themselves before showing the app to anyone would be
-friction with nothing on the other side of it.
+The owner is exempt: they demo wherever the meeting happens, and they pay for
+the calls either way. `tables.opened_lat`/`opened_lng` keep the reading, so a
+figure that looks wrong later has an explanation attached.
 
-`owner_list_admins` exists because `profiles` is restricted to `id = auth.uid()`
-— there is no query the owner could write that would see another account, so the
-assignment screen needs a definer function. Nobody reaches `restaurant_admins`
-directly: it has RLS on, no policy, and no grant to `anon` or `authenticated`.
+**What was tried first and removed:** `restaurant_admins`, a table of which
+account may open tables at which restaurant, assigned by the owner. It worked,
+and it was the wrong question — at two restaurants it is nothing, at five
+hundred it is a full-time job, and it still could not stop an assigned admin
+from opening a table somewhere else. Migration
+`20260826420000_a_table_is_opened_where_the_restaurant_is` takes it back out.
+Do not reintroduce per-account assignment without a reason that answers the
+"where", because that is the question.
 
 ## What a restaurant costs to serve
 

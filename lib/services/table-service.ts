@@ -23,7 +23,11 @@ function toFriendlyError(error: unknown, fallback: string) {
 export type TableWithRestaurant = TableRow & { restaurant_name: string };
 
 /** Creates a table for the signed-in admin. The invite code is generated server-side. */
-export async function createTable(name: string, restaurantId: string): Promise<TableRow> {
+export async function createTable(
+  name: string,
+  restaurantId: string,
+  position: { latitude: number; longitude: number } | null
+): Promise<TableRow> {
   const { data: userData } = await supabase.auth.getUser();
   const adminId = userData.user?.id;
 
@@ -37,6 +41,12 @@ export async function createTable(name: string, restaurantId: string): Promise<T
       admin_id: adminId,
       name: name.trim(),
       restaurant_id: restaurantId,
+      // Where the phone said it was. The database refuses a table opened away
+      // from the restaurant it names — see
+      // `prevent_table_outside_restaurant_radius`, and read its comment before
+      // trusting this for anything: the position is client-supplied.
+      opened_lat: position?.latitude ?? null,
+      opened_lng: position?.longitude ?? null,
     })
     .select()
     .single();
@@ -49,6 +59,15 @@ export async function createTable(name: string, restaurantId: string): Promise<T
       throw new TableServiceError(
         'That restaurant is no longer taking new tables. Pick another one.'
       );
+    }
+
+    // The perimeter refusals name the restaurant and the distance already, so
+    // they are shown as written rather than replaced by a generic apology.
+    if (
+      error.message.includes('Turn on location') ||
+      error.message.includes('Open the table at the restaurant you are in')
+    ) {
+      throw new TableServiceError(error.message);
     }
     throw toFriendlyError(error, 'Could not create the table. Please try again.');
   }

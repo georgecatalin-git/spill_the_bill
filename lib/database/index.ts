@@ -30,10 +30,6 @@ export type BillClaimDetail = Tables<'bill_claim_details'>;
 export type BillTipShareRow = Tables<'bill_tip_shares'>;
 export type BillEvenShareRow = Tables<'bill_even_shares'>;
 
-/** An admin account and the restaurants it may open tables at. Owner only. */
-export type AdminAccount =
-  Database['public']['Functions']['owner_list_admins']['Returns'][number];
-
 /** Per-restaurant usage counts, owner only. Deliberately carries no money. */
 export type OwnerRestaurantStat =
   Database['public']['Functions']['owner_restaurant_stats']['Returns'][number];
