@@ -35,6 +35,8 @@ type ReceiptItemRowProps = {
    * other people's claims.
    */
   onSplitRest?: () => void;
+  /** How many people are actually at the table. Below two there is nothing to split. */
+  splitCandidates?: number;
   onRelease: () => void;
 };
 
@@ -50,6 +52,7 @@ export function ReceiptItemRow({
   onClaim,
   onRelease,
   onSplitRest,
+  splitCandidates = 0,
 }: ReceiptItemRowProps) {
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
@@ -134,10 +137,16 @@ export function ReceiptItemRow({
         </View>
       </View>
 
-      {onSplitRest && unitLimited && !settled && !locked && (
+      {/*
+        Offered only when there is actually somebody to split between. At a
+        table of one it would read as a split and behave as "claim the rest",
+        which is a promise the button cannot keep.
+      */}
+      {onSplitRest && unitLimited && !settled && !locked && splitCandidates > 1 && (
         <Pressable onPress={onSplitRest} style={({ pressed }) => pressed && styles.disabled}>
           <ThemedText type="secondary" style={[styles.splitRest, { color: accent }]}>
-            Nobody remembers? Split the remaining {item.quantity - claimed} between everyone
+            Nobody remembers? Share the remaining {item.quantity - claimed} between the{' '}
+            {splitCandidates} of you
           </ThemedText>
         </Pressable>
       )}

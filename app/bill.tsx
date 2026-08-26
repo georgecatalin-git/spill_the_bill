@@ -343,6 +343,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                         onClaim={() => bill.claim(item.id)}
                         onRelease={() => bill.release(item.id)}
                         onSplitRest={() => confirmSplitRest(item)}
+                        splitCandidates={bill.participants.length}
                       />
                     )}
                   </View>
