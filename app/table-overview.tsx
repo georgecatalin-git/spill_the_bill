@@ -189,10 +189,9 @@ export default function TableOverviewScreen() {
   const isAdmin = !session;
 
   // "Everything is claimed" is the server's call, not a comparison made here.
-  // Guests claim ITEMS, so what they can ever cover is the subtotal — remaining
-  // still holds the tax, service and tip nobody picks off a receipt. Reading it
-  // as `remaining === 0` would never come true on a bill carrying any tax, and
-  // would be a second definition of a thing the database already decides.
+  // Remaining now counts only unclaimed items, so it does reach zero — but the
+  // status is still the one thing that decides, rather than a second definition
+  // of settled living in the screen.
   const settled = overview?.status === 'FULLY_ASSIGNED';
 
   if (loading && !overview) {
@@ -610,7 +609,10 @@ async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null
     status: bill.status,
     totalCents: bill.total_cents,
     assignedCents,
-    remainingCents: bill.total_cents - assignedCents,
+    // The database's own figure, not `total - assigned`. Those differ by the
+    // tip, which is split by headcount and was never outstanding — computing it
+    // here announced "Remaining 139.40" on a bill where every item had an owner.
+    remainingCents: summary?.remaining_cents ?? 0,
     // Everyone at the table, including anyone still on zero — the guest view
     // shows them too, and a missing name reads as a bug. Items plus tip, same
     // as the guest side, so the two never disagree.

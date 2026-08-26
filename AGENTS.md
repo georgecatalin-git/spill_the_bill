@@ -122,6 +122,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826280000_split_the_rest_evenly` | when nobody remembers who had what |
 | `20260826300000_share_the_rest_by_value` | the same, but divided by value rather than by the piece |
 | `20260826320000_host_assigns_items` | the host records orders for people who have no app |
+| `20260826340000_remaining_excludes_the_tip` | "remaining" stops counting the tip as unowned |
 
 Regenerate types after any schema change:
 
@@ -315,6 +316,22 @@ Switching modes **keeps the claims**. Someone who ticks half a receipt, flips
 to even, and flips back finds their selections where they left them —
 discarding them would make the toggle a one-way door wearing a switch's
 clothes.
+
+**"Remaining" means unclaimed *items*, and only that.** What anybody can pick
+off a receipt is the lines; the tip is split by headcount, and tax and service
+are carried by the bill rather than chosen from it. Subtracting them from the
+grand total produced a figure that could never reach zero — a fully claimed
+1533.40 bill announced "Remaining 139.40", which was the tip, while the rows
+underneath showed each person's slice of that same tip.
+
+Three places computed it and two disagreed with the third. `bill_summaries` was
+right (`subtotal - assigned`); `get_bill_assignment_summary` and the overview
+screen each did `total - assigned` on their own. The screen now reads the
+view's figure instead of recomputing, which is the general rule here: one
+definition, in the database.
+
+The percentage had the same fault — assigned over *total* never reaches 100% on
+a bill with a tip, so a finished receipt read as ninety percent done.
 
 One UI note worth keeping: "closed" means `COMPLETED` and nothing else.
 `FULLY_ASSIGNED` used to count as locked on the guest screen, which both
