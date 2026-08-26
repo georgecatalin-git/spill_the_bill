@@ -107,6 +107,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826220000_restaurants_grants_match_the_rules` | the grants on `restaurants` stop contradicting the policies |
 | `20260826240000_receipt_scan_log` | what each restaurant costs in receipt-reading |
 | `20260826260000_leaving_a_table_revokes_reading` | a guest who left stops seeing the table |
+| `20260826280000_split_the_rest_evenly` | when nobody remembers who had what |
 
 Regenerate types after any schema change:
 
@@ -153,6 +154,26 @@ Two callers pass `p_require_active => false` and must keep doing so.
 left, join again?" instead of a dead end — and `leave_table` stays idempotent.
 Rejoining is unaffected: `join_table` reactivates an existing token without
 going through the resolver.
+
+**When nobody remembers.** Five people, seventy beers, four hours: by the end
+nobody can say whether they had seven or fifteen, and the bill will not close
+while units are unclaimed. `split_remaining_evenly` is the honest way out —
+pick nobody, and what is left is shared between everyone still at the table.
+
+It splits **units, not money**. A claim here is a count of things consumed and
+the money already follows from it, so splitting units keeps one source of
+truth. The price is that eight beers between five people is 2/2/2/1/1 — one
+beer of spread, because nobody drank four fifths of a beer. Spare units go to
+whoever has claimed least, so the person who already owned up to fifteen does
+not also collect the extra.
+
+Admin only: it rewrites other people's claims. The UI does not ask *who* was
+drinking, on purpose — the case this exists for is "we have no idea", and
+asking re-opens the argument it is meant to end.
+
+An item row carries its state as a coloured stripe: green once every unit has
+an owner, amber while any is outstanding. It reads across a table without
+anyone parsing a number, which is the moment it is needed.
 
 Closed bills are frozen in the database, not only in the UI: `bill_items`,
 `bills` and claim deletion all refuse once a bill is `COMPLETED`. A

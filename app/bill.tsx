@@ -22,6 +22,7 @@ import { Spacing } from '@/constants/theme';
 import { useAdminBill } from '@/hooks/use-admin-bill';
 import { useGuestBill } from '@/hooks/use-guest-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { confirmAction } from '@/lib/confirm';
 import type { BillItem as DbBillItem } from '@/lib/database';
 import type { BillItem } from '@/lib/types';
 import { useGuest } from '@/providers/guest-provider';
@@ -248,6 +249,28 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const draft = bill.bill?.status === 'DRAFT';
   const completed = bill.bill?.status === 'COMPLETED';
 
+  async function confirmSplitRest(item: DbBillItem) {
+    const claimed = Object.values(bill.claims[item.id] ?? {}).reduce((a, b) => a + b, 0);
+    const left = item.quantity - claimed;
+    const people = bill.participants.length;
+
+    const ok = await confirmAction({
+      title: `Split ${left} between everyone?`,
+      message: `Nobody claimed ${left} of ${item.name}. They will be shared between the ${people} people at the table — the spare ones go to whoever has claimed least.`,
+      confirmLabel: 'Split',
+    });
+    if (!ok) return;
+
+    try {
+      await bill.splitRestOfItem(item.id);
+    } catch (caught) {
+      Alert.alert(
+        'Could not split',
+        caught instanceof Error ? caught.message : 'Please try again.'
+      );
+    }
+  }
+
   function confirmRemove(item: DbBillItem) {
     Alert.alert('Remove this item?', item.name, [
       { text: 'Cancel', style: 'cancel' },
@@ -319,6 +342,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                         locked={completed}
                         onClaim={() => bill.claim(item.id)}
                         onRelease={() => bill.release(item.id)}
+                        onSplitRest={() => confirmSplitRest(item)}
                       />
                     )}
                   </View>

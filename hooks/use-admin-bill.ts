@@ -14,6 +14,7 @@ import {
   adminClaimItem,
   adminUpdateClaimQuantity,
   getAdminParticipantId,
+  splitRemainingEvenly,
 } from '@/lib/services/claim-service';
 import {
   getBillClaimDetails,
@@ -240,10 +241,25 @@ export function useAdminBill(tableId: string | undefined) {
   // else active there.
   const myTotalCents = splitEvenly ? myEvenShare : myItemsCents + myTipCents;
 
+  /**
+   * Everyone still at the table shares what nobody claimed. The set is not a
+   * choice in the UI on purpose: the case this exists for is "we have no idea",
+   * and asking who was drinking re-opens the argument it is meant to end.
+   */
+  const splitRestOfItem = useCallback(
+    async (billItemId: string) => {
+      const ids = state.participants.map((p) => p.id);
+      await splitRemainingEvenly(billItemId, ids);
+      await load();
+    },
+    [state.participants, load]
+  );
+
   return {
     ...state,
     connectionStatus,
     splitEvenly,
+    splitRestOfItem,
     myTipCents,
     reload: () => load(),
     addItem,

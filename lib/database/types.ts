@@ -674,6 +674,14 @@ export type Database = {
       };
       generate_invite_code: { Args: { p_length?: number }; Returns: string };
       is_owner: { Args: never; Returns: boolean };
+      split_remaining_evenly: {
+        Args: { p_bill_item_id: string; p_participant_ids: string[] };
+        Returns: {
+          guest_id: string;
+          added: number;
+          now_claimed: number;
+        }[];
+      };
       record_receipt_scan: {
         Args: {
           p_table_id: string;

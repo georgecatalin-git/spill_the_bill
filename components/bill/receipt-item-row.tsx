@@ -29,6 +29,12 @@ type ReceiptItemRowProps = {
   /** Claims are frozen once the bill is completed. */
   locked?: boolean;
   onClaim: () => void;
+  /**
+   * Offered only when units are still unowned and the viewer runs the table.
+   * Absent everywhere else, so a guest never sees a control that would rewrite
+   * other people's claims.
+   */
+  onSplitRest?: () => void;
   onRelease: () => void;
 };
 
@@ -43,12 +49,15 @@ export function ReceiptItemRow({
   locked,
   onClaim,
   onRelease,
+  onSplitRest,
 }: ReceiptItemRowProps) {
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
   const accent = useThemeColor({}, 'accent');
   const accentText = useThemeColor({}, 'accentText');
   const textSecondary = useThemeColor({}, 'textSecondary');
+  const success = useThemeColor({}, 'success');
+  const warning = useThemeColor({}, 'warning');
 
   const split = amounts ?? itemSplit(item, claims);
   const claimants = participants.filter((participant) => sharesFor(claims, item.id, participant.id) > 0);
@@ -59,8 +68,15 @@ export function ReceiptItemRow({
   const unitLimited = isUnitLimited(item);
   const claimed = totalShares(claims, item.id);
 
+  // Settled means nothing on this line is still waiting for an owner: every
+  // unit counted out, or — on a shareable line — at least one person on it.
+  // The stripe carries it at a glance, so the table can see what is left
+  // without reading a single number.
+  const settled = unitLimited ? claimed >= item.quantity : claimants.length > 0;
+  const stateColor = settled ? success : warning;
+
   return (
-    <View style={[styles.row, { borderColor: border }]}>
+    <View style={[styles.row, { borderLeftColor: stateColor }]}>
       <View style={styles.header}>
         <View style={styles.titles}>
           <ThemedText style={styles.name}>{item.name}</ThemedText>
@@ -118,9 +134,23 @@ export function ReceiptItemRow({
         </View>
       </View>
 
+      {onSplitRest && unitLimited && !settled && !locked && (
+        <Pressable onPress={onSplitRest} style={({ pressed }) => pressed && styles.disabled}>
+          <ThemedText type="secondary" style={[styles.splitRest, { color: accent }]}>
+            Nobody remembers? Split the remaining {item.quantity - claimed} between everyone
+          </ThemedText>
+        </Pressable>
+      )}
+
+      {claimants.length === 0 && (
+        <ThemedText type="secondary" style={[styles.claimSummary, { color: stateColor }]}>
+          {unitLimited ? `0 of ${item.quantity} claimed` : 'Nobody yet'}
+        </ThemedText>
+      )}
+
       {claimants.length > 0 && (
         <View style={styles.claimants}>
-          <ThemedText type="secondary" style={styles.claimSummary}>
+          <ThemedText type="secondary" style={[styles.claimSummary, { color: stateColor }]}>
             {unitLimited
               ? `${claimed} of ${item.quantity} claimed`
               : `Shared by ${claimants.length}`}
@@ -162,7 +192,11 @@ export function ReceiptItemRow({
 const styles = StyleSheet.create({
   row: {
     paddingVertical: Spacing.md,
+    paddingLeft: Spacing.md,
     gap: Spacing.md,
+    // A stripe rather than a tint: it reads at arm's length across a table,
+    // and it does not fight the text behind it.
+    borderLeftWidth: 3,
   },
   header: {
     flexDirection: 'row',
@@ -226,6 +260,10 @@ const styles = StyleSheet.create({
   },
   claimants: {
     gap: Spacing.sm,
+  },
+  splitRest: {
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   claimSummary: {
     fontSize: 13,

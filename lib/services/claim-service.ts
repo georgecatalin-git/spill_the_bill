@@ -282,3 +282,31 @@ export async function getAdminParticipantId(tableId: string): Promise<string | n
   if (error) throw toClaimError(error, 'Unable to identify you at this table.');
   return (data as string | null) ?? null;
 }
+
+/**
+ * Shares the unclaimed units of a counted line between the people given.
+ *
+ * For the case the app could not answer before: seventy beers, five people,
+ * and nobody able to say who had what. The server decides the split — units,
+ * by largest remainder, spare ones to whoever claimed least — so the figures
+ * stay the database's to compute, as everywhere else here.
+ */
+export async function splitRemainingEvenly(billItemId: string, participantIds: string[]) {
+  const { error } = await supabase.rpc('split_remaining_evenly', {
+    p_bill_item_id: billItemId,
+    p_participant_ids: participantIds,
+  });
+
+  if (error) {
+    // The server's refusals are already written for a person to read.
+    if (
+      error.message.includes('Only the table admin') ||
+      error.message.includes('Nothing is left') ||
+      error.message.includes('already shared') ||
+      error.message.includes('not at this table')
+    ) {
+      throw new ClaimError(error.message);
+    }
+    throw toClaimError(error, 'Could not split what is left.');
+  }
+}
