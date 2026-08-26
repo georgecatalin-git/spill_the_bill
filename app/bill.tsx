@@ -23,6 +23,7 @@ import { useAdminBill } from '@/hooks/use-admin-bill';
 import { useGuestBill } from '@/hooks/use-guest-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
+import { formatCents } from '@/lib/money';
 import type { BillItem as DbBillItem } from '@/lib/database';
 import type { BillItem } from '@/lib/types';
 import { useGuest } from '@/providers/guest-provider';
@@ -254,10 +255,14 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
     const left = item.quantity - claimed;
     const people = bill.participants.length;
 
+    // The figure is the whole point of the confirmation: nobody agrees to
+    // "share it" in the abstract, everybody agrees to 5.17 each.
+    const each = Math.round((left * item.unit_price_cents) / people);
+
     const ok = await confirmAction({
-      title: `Split ${left} between everyone?`,
-      message: `Nobody claimed ${left} of ${item.name}. They will be shared between the ${people} people at the table — the spare ones go to whoever has claimed least.`,
-      confirmLabel: 'Split',
+      title: `Share ${left} between the ${people} of you?`,
+      message: `Nobody claimed ${left} × ${item.name}. It becomes one shared line, and each of you pays ${formatCents(each, currency)}.`,
+      confirmLabel: 'Share',
     });
     if (!ok) return;
 

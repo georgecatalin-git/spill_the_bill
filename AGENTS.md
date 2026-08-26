@@ -108,6 +108,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826240000_receipt_scan_log` | what each restaurant costs in receipt-reading |
 | `20260826260000_leaving_a_table_revokes_reading` | a guest who left stops seeing the table |
 | `20260826280000_split_the_rest_evenly` | when nobody remembers who had what |
+| `20260826300000_share_the_rest_by_value` | the same, but divided by value rather than by the piece |
 
 Regenerate types after any schema change:
 
@@ -160,12 +161,26 @@ nobody can say whether they had seven or fifteen, and the bill will not close
 while units are unclaimed. `split_remaining_evenly` is the honest way out —
 pick nobody, and what is left is shared between everyone still at the table.
 
-It splits **units, not money**. A claim here is a count of things consumed and
-the money already follows from it, so splitting units keeps one source of
-truth. The price is that eight beers between five people is 2/2/2/1/1 — one
-beer of spread, because nobody drank four fifths of a beer. Spare units go to
-whoever has claimed least, so the person who already owned up to fifteen does
-not also collect the extra.
+It divides **value, not pieces**. The first version split leftover units, and
+that was fine for beer and wrong for everything else: one pork neck left
+between twelve people cannot be cut into twelfths, so the whole 62 lei landed
+on whoever sorted first, and "why me?" had no good answer.
+
+The remainder becomes a **shared line** instead — the same mechanism a dessert
+platter uses. `quantity = 1` means "divide between whoever claims it",
+`item_claim_shares` settles the odd cents by largest remainder, and no new
+concept is needed anywhere. One pork neck between twelve is 5.17 each.
+
+Two shapes, decided by whether anything was claimed: nothing claimed and the
+line itself becomes the shared one, no duplicate row; something claimed and the
+line is trimmed to what people owned up to while the rest splits off as its own
+row. Totals are untouched either way — `apply_bill_item_total` recomputes
+`total = quantity × unit_price`, which is why the split-off row carries the
+whole remainder as its unit price. That is the only shape that survives the
+trigger.
+
+Refused below two people, in Postgres and not only in the picker: at a table of
+one it would read as a split and behave as "claim the rest".
 
 Admin only: it rewrites other people's claims. The UI does not ask *who* was
 drinking, on purpose — the case this exists for is "we have no idea", and
