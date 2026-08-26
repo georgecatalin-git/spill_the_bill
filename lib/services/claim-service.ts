@@ -310,3 +310,37 @@ export async function splitRemainingEvenly(billItemId: string, participantIds: s
     throw toClaimError(error, 'Could not split what is left.');
   }
 }
+
+/**
+ * Puts an item on a named person's share.
+ *
+ * For the table where not everyone installed the app — the host writes down
+ * what each person ordered, the way a waiter's pad works. A guest who *is* in
+ * the app can still change it themselves: this records, it does not overrule.
+ *
+ * A quantity of 0 removes the assignment, which is how a mistake is corrected.
+ */
+export async function assignItemTo(
+  billItemId: string,
+  participantId: string,
+  quantity: number
+) {
+  const { error } = await supabase.rpc('admin_set_participant_claim', {
+    p_bill_item_id: billItemId,
+    p_participant_id: participantId,
+    p_quantity: quantity,
+  });
+
+  if (error) {
+    // The server's refusals are already written for a person to read.
+    if (
+      error.message.includes('Only the table admin') ||
+      error.message.includes('not at this table') ||
+      error.message.includes('has left the table') ||
+      error.message.includes('still available')
+    ) {
+      throw new ClaimError(error.message);
+    }
+    throw toClaimError(error, 'Could not assign that item.');
+  }
+}

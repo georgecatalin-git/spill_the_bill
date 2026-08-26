@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { Dropdown, type DropdownOption } from '@/components/ui/dropdown';
 import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCents } from '@/lib/money';
@@ -37,6 +38,11 @@ type ReceiptItemRowProps = {
   onSplitRest?: () => void;
   /** How many people are actually at the table. Below two there is nothing to split. */
   splitCandidates?: number;
+  /**
+   * Lets the host put this item on somebody else's share. Passed only on the
+   * admin's own screen — a guest never gets to write on another guest's bill.
+   */
+  onAssign?: (participantId: string) => void;
   onRelease: () => void;
 };
 
@@ -53,6 +59,7 @@ export function ReceiptItemRow({
   onRelease,
   onSplitRest,
   splitCandidates = 0,
+  onAssign,
 }: ReceiptItemRowProps) {
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
@@ -76,6 +83,17 @@ export function ReceiptItemRow({
   // The stripe carries it at a glance, so the table can see what is left
   // without reading a single number.
   const settled = unitLimited ? claimed >= item.quantity : claimants.length > 0;
+
+  // Everyone at the table, with what they already hold — so the host can see
+  // who is on this line without leaving the dropdown.
+  const assignable: DropdownOption[] = participants.map((participant) => {
+    const has = sharesFor(claims, item.id, participant.id);
+    return {
+      value: participant.id,
+      label: participant.name,
+      hint: has > 0 ? `already has ${has}` : undefined,
+    };
+  });
   const stateColor = settled ? success : warning;
 
   return (
@@ -136,6 +154,25 @@ export function ReceiptItemRow({
           )}
         </View>
       </View>
+
+      {/*
+        The host's own control: record what somebody ordered without needing
+        them to have the app at all. Guests who do have it can still change
+        what was put on their share.
+      */}
+      {onAssign && !locked && assignable.length > 0 && (
+        <View style={styles.assign}>
+          <ThemedText type="secondary" style={styles.assignLabel}>
+            Order for somebody
+          </ThemedText>
+          <Dropdown
+            value=""
+            options={assignable}
+            onChange={onAssign}
+            placeholder="Who had this?"
+          />
+        </View>
+      )}
 
       {/*
         Offered only when there is actually somebody to split between. At a
@@ -269,6 +306,12 @@ const styles = StyleSheet.create({
   },
   claimants: {
     gap: Spacing.sm,
+  },
+  assign: {
+    gap: Spacing.sm,
+  },
+  assignLabel: {
+    fontSize: 13,
   },
   splitRest: {
     fontSize: 13,

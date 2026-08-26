@@ -131,6 +131,31 @@ export async function setParticipantSettled(participantId: string, settled: bool
 }
 
 /**
+ * Adds somebody to the table by name alone.
+ *
+ * For the person who is at the table but not in the app — no phone, no code,
+ * no account. They still get a share, because the host records what they
+ * ordered. RLS already allows this: the admin may insert participants into
+ * their own table.
+ *
+ * No `select()` here for the same reason as below — `participants` has
+ * column-level grants that exclude `session_token`, and a bare select asks for
+ * everything.
+ */
+export async function addParticipant(tableId: string, name: string) {
+  const { error } = await supabase
+    .from('participants')
+    .insert({ table_id: tableId, name: name.trim(), is_admin: false });
+
+  if (error) {
+    if (error.message.includes('duplicate key')) {
+      throw new TableServiceError('Somebody with that name is already at this table.');
+    }
+    throw toFriendlyError(error, 'Could not add that person.');
+  }
+}
+
+/**
  * Adds the admin to their own table's participant list, once.
  *
  * Note the missing `.select()`: `participants` has a column-level grant that

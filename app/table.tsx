@@ -8,13 +8,15 @@ import { ParticipantList } from '@/components/table/participant-list';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { FormField } from '@/components/ui/form-field';
 import { Card } from '@/components/ui/card';
 import { ConnectionIndicator } from '@/components/ui/connection-status';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useRealtimeTable } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getTable, listParticipants } from '@/lib/services/table-service';
+import { addParticipant, getTable, listParticipants } from '@/lib/services/table-service';
+import { isBlank } from '@/lib/validation';
 import { buildInvitationLink, buildInvitationMessage } from '@/lib/table';
 import type { Participant } from '@/lib/types';
 
@@ -39,11 +41,29 @@ export default function TableScreen() {
   const [people, setPeople] = useState<Participant[]>([]);
   const [loadedCode, setLoadedCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [addingPerson, setAddingPerson] = useState(false);
 
   const tableName = name ?? 'Your table';
   const restaurantName = restaurant ?? '';
   // Opened from the dashboard we only get an id, so the code is fetched.
   const inviteCode = code ?? loadedCode ?? '';
+
+  async function handleAddPerson() {
+    if (isBlank(newName) || !id) return;
+
+    setError(null);
+    setAddingPerson(true);
+    try {
+      await addParticipant(id, newName);
+      setNewName('');
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not add that person.');
+    } finally {
+      setAddingPerson(false);
+    }
+  }
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -133,6 +153,34 @@ export default function TableScreen() {
             <Button label="Invite People" onPress={() => setInvitationVisible(true)} />
           </Card>
 
+          {/*
+            Not everyone at a table installs an app, and until now anyone who
+            did not was simply missing from the bill — their share fell to
+            whoever did join. Added by name, they get a share like anybody
+            else; the host records what they ordered on the bill screen.
+          */}
+          <Card style={styles.addCard}>
+            <ThemedText type="secondary">
+              Somebody without the app? Add them by name and put their orders on
+              the bill yourself.
+            </ThemedText>
+            <FormField
+              label="Name"
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="Bogdan"
+              autoCapitalize="words"
+              onSubmitEditing={handleAddPerson}
+              returnKeyType="done"
+            />
+            <Button
+              label={addingPerson ? 'Adding…' : 'Add to the table'}
+              variant="secondary"
+              onPress={handleAddPerson}
+              disabled={addingPerson || isBlank(newName)}
+            />
+          </Card>
+
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <ThemedText type="label" style={styles.sectionLabel}>
@@ -176,6 +224,9 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
     gap: Spacing.xl,
+  },
+  addCard: {
+    gap: Spacing.md,
   },
   inviteCard: {
     gap: Spacing.lg,

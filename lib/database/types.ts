@@ -674,12 +674,24 @@ export type Database = {
       };
       generate_invite_code: { Args: { p_length?: number }; Returns: string };
       is_owner: { Args: never; Returns: boolean };
+      admin_set_participant_claim: {
+        Args: {
+          p_bill_item_id: string;
+          p_participant_id: string;
+          p_quantity: number;
+        };
+        Returns: {
+          item_id: string;
+          guest_id: string;
+          now_claimed: number;
+        }[];
+      };
       split_remaining_evenly: {
         Args: { p_bill_item_id: string; p_participant_ids: string[] };
         Returns: {
-          guest_id: string;
-          added: number;
-          now_claimed: number;
+          shared_item_id: string;
+          people: number;
+          each_cents: number;
         }[];
       };
       record_receipt_scan: {

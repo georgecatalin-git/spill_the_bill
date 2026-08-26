@@ -15,6 +15,7 @@ import {
   adminUpdateClaimQuantity,
   getAdminParticipantId,
   splitRemainingEvenly,
+  assignItemTo,
 } from '@/lib/services/claim-service';
 import {
   getBillClaimDetails,
@@ -255,11 +256,25 @@ export function useAdminBill(tableId: string | undefined) {
     [state.participants, load]
   );
 
+  /**
+   * One more of this item on that person's share. Tapping is how a host works
+   * through a round — "another beer for Bogdan" — so it adds rather than sets.
+   */
+  const assignOne = useCallback(
+    async (billItemId: string, participantId: string) => {
+      const held = state.claims[billItemId]?.[participantId] ?? 0;
+      await assignItemTo(billItemId, participantId, held + 1);
+      await load();
+    },
+    [state.claims, load]
+  );
+
   return {
     ...state,
     connectionStatus,
     splitEvenly,
     splitRestOfItem,
+    assignOne,
     myTipCents,
     reload: () => load(),
     addItem,

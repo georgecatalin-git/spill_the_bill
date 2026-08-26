@@ -250,6 +250,17 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const draft = bill.bill?.status === 'DRAFT';
   const completed = bill.bill?.status === 'COMPLETED';
 
+  async function assignTo(itemId: string, participantId: string) {
+    try {
+      await bill.assignOne(itemId, participantId);
+    } catch (caught) {
+      Alert.alert(
+        'Could not assign',
+        caught instanceof Error ? caught.message : 'Please try again.'
+      );
+    }
+  }
+
   async function confirmSplitRest(item: DbBillItem) {
     const claimed = Object.values(bill.claims[item.id] ?? {}).reduce((a, b) => a + b, 0);
     const left = item.quantity - claimed;
@@ -349,6 +360,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                         onRelease={() => bill.release(item.id)}
                         onSplitRest={() => confirmSplitRest(item)}
                         splitCandidates={bill.participants.length}
+                        onAssign={(participantId) => assignTo(item.id, participantId)}
                       />
                     )}
                   </View>

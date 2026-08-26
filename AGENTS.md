@@ -12,8 +12,20 @@ invitation link. **Guests** join with just a name — no account, no email, no
 password — and each person taps the items they actually consumed. Everyone's
 share is worked out from those selections.
 
-The receipt is the single source of truth. Nothing is "assigned" by the admin
-on other people's behalf.
+The receipt is the single source of truth. Guests claim their own items, and
+that is still the default path.
+
+The host may also record an order **on somebody's behalf**, through
+`admin_set_participant_claim`. This was once forbidden outright, and the rule
+was quietly costing more than it protected: a table only worked if everyone
+installed the app and joined, and anyone who did not was simply absent from the
+bill — their share fell to whoever did. With this, one phone is enough. The host
+adds people by name and writes down what they ordered, the way a waiter's pad
+works.
+
+The protection survives where it matters: a guest who *is* in the app can still
+change what was put on their share. `claim_item` and `remove_item_claim` are
+untouched. The host records; they do not get the last word.
 
 ## Rules that hold everywhere
 
@@ -109,6 +121,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826260000_leaving_a_table_revokes_reading` | a guest who left stops seeing the table |
 | `20260826280000_split_the_rest_evenly` | when nobody remembers who had what |
 | `20260826300000_share_the_rest_by_value` | the same, but divided by value rather than by the piece |
+| `20260826320000_host_assigns_items` | the host records orders for people who have no app |
 
 Regenerate types after any schema change:
 
