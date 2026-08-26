@@ -17,10 +17,11 @@ const parser: ReceiptParser = claudeReceiptParser;
 /**
  * Reads a receipt photo. The UI only ever calls this, never a parser directly.
  *
- * `tableId` is what lets the server bill the scan to a restaurant; a scan
- * without one still works, it just goes uncounted.
+ * `tableId` is what lets the server bill the scan to a restaurant, and it is
+ * not optional: the Edge Function refuses a scan it cannot attribute, because
+ * an unattributed one is spending that never reaches anybody's figures.
  */
-export function parseReceipt(imageUri: string, tableId?: string) {
+export function parseReceipt(imageUri: string, tableId: string) {
   return parser(imageUri, tableId);
 }
 

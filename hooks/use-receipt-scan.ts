@@ -17,13 +17,22 @@ const GENERIC_ERROR = "We couldn't read this receipt.";
  * The screen only sees loading / ready / error, so replacing the mock parser
  * with a real service needs no change here or in the UI.
  */
-export function useReceiptScan(imageUri: string | undefined, tableId?: string) {
+export function useReceiptScan(imageUri: string | undefined, tableId: string | undefined) {
   const [state, setState] = useState<ReceiptScanState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!imageUri) {
       setState({ status: 'error', message: 'There is no photo to read.' });
+      return;
+    }
+
+    // The server refuses a scan it cannot attribute to a restaurant, so there
+    // is nothing to gain by sending one. Every route into this screen carries
+    // the table; this is the failure that says so rather than a 400 written
+    // for a developer.
+    if (!tableId) {
+      setState({ status: 'error', message: 'This scan is not attached to a table.' });
       return;
     }
 

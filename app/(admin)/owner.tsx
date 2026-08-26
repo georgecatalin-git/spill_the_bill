@@ -21,12 +21,15 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import {
+  assignRestaurant,
   createRestaurant,
   deleteRestaurant,
   mergeRestaurants,
+  revokeRestaurant,
   setRestaurantActive,
   updateRestaurant,
 } from '@/lib/services/restaurant-service';
+import { useAdminAccounts } from '@/lib/services/use-admin-accounts';
 import { useOwnerStats } from '@/lib/services/use-owner-stats';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
@@ -34,6 +37,7 @@ import { useAuth } from '@/providers/auth-provider';
 export default function OwnerScreen() {
   const { role } = useAuth();
   const { stats, loading, error, reload } = useOwnerStats();
+  const { accounts, error: accountsError, reload: reloadAccounts } = useAdminAccounts();
   const warning = useThemeColor({}, 'warning');
   // The keyboard covers the tab bar as well as the fields, so the avoiding
   // view has to be told how much of the bottom is already spoken for.
@@ -79,12 +83,14 @@ export default function OwnerScreen() {
       setBusyId(restaurantId);
       try {
         await action();
-        await reload();
+        // Both, because giving access changes the account list and deleting a
+        // restaurant changes what those accounts are still assigned to.
+        await Promise.all([reload(), reloadAccounts()]);
       } finally {
         setBusyId(null);
       }
     },
-    [reload]
+    [reload, reloadAccounts]
   );
 
   // Hiding the tab is a convenience; this is the screen refusing to render for
@@ -171,9 +177,9 @@ export default function OwnerScreen() {
               </ThemedText>
             </Card>
 
-            {error && (
+            {(error ?? accountsError) && (
               <ThemedText type="secondary" style={{ color: warning }}>
-                {error}
+                {error ?? accountsError}
               </ThemedText>
             )}
 
@@ -195,6 +201,7 @@ export default function OwnerScreen() {
                   key={stat.restaurant_id}
                   stat={stat}
                   mergeTargets={stats.filter((row) => row.restaurant_id !== stat.restaurant_id)}
+                  accounts={accounts}
                   busy={busyId === stat.restaurant_id}
                   onSave={(nextName, nextCity) =>
                     runOn(stat.restaurant_id, () =>
@@ -211,6 +218,16 @@ export default function OwnerScreen() {
                   }
                   onDelete={() =>
                     runOn(stat.restaurant_id, () => deleteRestaurant(stat.restaurant_id))
+                  }
+                  onGrant={(adminId) =>
+                    runOn(stat.restaurant_id, () =>
+                      assignRestaurant(stat.restaurant_id, adminId)
+                    )
+                  }
+                  onRevoke={(adminId) =>
+                    runOn(stat.restaurant_id, () =>
+                      revokeRestaurant(stat.restaurant_id, adminId)
+                    )
                   }
                 />
               ))}

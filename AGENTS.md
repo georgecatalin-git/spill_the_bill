@@ -123,6 +123,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826300000_share_the_rest_by_value` | the same, but divided by value rather than by the piece |
 | `20260826320000_host_assigns_items` | the host records orders for people who have no app |
 | `20260826340000_remaining_excludes_the_tip` | "remaining" stops counting the tip as unowned |
+| `20260826360000_restaurants_have_admins` | only an account the owner has assigned may open tables at a restaurant |
 
 Regenerate types after any schema change:
 
@@ -518,6 +519,55 @@ restaurant in person anyway.
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
 
+## A restaurant has admins
+
+Nothing tied an account to a restaurant, and sign-up is open. So anyone who
+could reach the sign-up screen could pick any restaurant on the list, start a
+table and scan receipts — uncapped spending on the one part of Split that costs
+money per use, landing on the usage figures of a place that had nothing to do
+with it. The number the owner area exists to make trustworthy was the number
+being falsified.
+
+`restaurant_admins` is the missing sentence: this account may open tables at
+that restaurant. The owner writes it from the restaurant's own card when the
+contract is signed.
+
+**Sign-up stays open.** The account should be *useless* until assigned, not
+impossible to create — a prospect makes one during the demo, and assignment is
+what signing the contract does. Rejected: geofencing, which is fragile indoors,
+invasive, trivially defeated, and annoys paying customers to catch one who will
+find another way.
+
+Three things follow, and only the second protects anything:
+
+- `list_my_restaurants` is what the picker asks. Assignment **and** `is_active`,
+  in one function rather than a filter in the service, so the picker cannot
+  drift away from what the triggers allow.
+- `prevent_table_at_unassigned_restaurant` refuses the row. Separate from
+  `prevent_table_at_inactive_restaurant` rather than folded into it: they refuse
+  for different reasons and the person reading the error should be told which.
+  Both are INSERT only, so withdrawing access never breaks a dinner already
+  under way.
+- Reading the list stops being `using (true)`. The names and towns of the
+  places paying for Split are not a security matter, but they are not a
+  stranger's business either.
+
+The read policy deliberately admits one case the trigger does not:
+`admin_has_table_at`. An admin whose access is withdrawn keeps *reading* the
+restaurant behind their old tables, because `admin_table_summaries` joins it and
+their whole history would otherwise vanish from the dashboard. It grants nothing
+new — if having a table there counted as permission, revoking access would be
+undone by the first table the admin ever created.
+
+**The owner is exempt throughout.** They pay for the API calls and they run the
+demos; making them assign themselves before showing the app to anyone would be
+friction with nothing on the other side of it.
+
+`owner_list_admins` exists because `profiles` is restricted to `id = auth.uid()`
+— there is no query the owner could write that would see another account, so the
+assignment screen needs a definer function. Nobody reaches `restaurant_admins`
+directly: it has RLS on, no policy, and no grant to `anon` or `authenticated`.
+
 ## What a restaurant costs to serve
 
 Reading a receipt is the only part of Split billed per use, and it is billed by
@@ -542,9 +592,16 @@ left the admin with nothing. The empty reply is the interesting one: it is a
 success would make "failed scans" a number that quietly excludes the most
 common way scanning wastes money.
 
-**The scan is attributed server-side.** The app sends `table_id`; the
-restaurant is resolved from it inside `record_receipt_scan`, so a client cannot
-bill its scans to somebody else. That function is granted to `service_role`
+**The scan is attributed server-side, and an unattributable scan does not
+happen.** The app sends `table_id`; the restaurant is resolved from it, so a
+client cannot bill its scans to somebody else. `table_id` was optional at
+first, and that was the hole: a scan sent without one — or with a made-up uuid
+— ran, spent tokens, and then vanished, because `record_receipt_scan` had no
+restaurant to attribute it to and dropping the row is the right call once the
+money is already gone. So the question moved to *before* the API call.
+`resolve_scan_restaurant` answers "which restaurant, if any" and the Edge
+Function refuses on null — which also covers somebody else's table, since the
+answer there is the same null. That function is granted to `service_role`
 alone — not even the owner may write a row, which is what keeps the figures
 worth trusting. Reading goes through `owner_restaurant_stats`; `receipt_scans`
 itself has no grants for `anon` or `authenticated` at all.

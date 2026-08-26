@@ -100,6 +100,40 @@ const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
   'claude-haiku-4-5': { input: 1, output: 5 },
 };
 
+function getServiceKey(): string | undefined {
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SECRET_KEY');
+}
+
+/**
+ * The restaurant this scan will be billed to, or null when the caller has no
+ * business scanning for that table.
+ *
+ * Asked BEFORE the API call, not after. `table_id` used to be optional, and a
+ * scan without one — or with a made-up uuid — ran, spent tokens, and then
+ * vanished from the figures because `record_receipt_scan` had no restaurant to
+ * attribute it to. Uncounted spending is the one thing the scan log exists to
+ * make impossible, so a scan that cannot be attributed does not happen.
+ */
+async function resolveRestaurant(tableId: string, adminId: string): Promise<string | null> {
+  const serviceKey = getServiceKey();
+  if (!serviceKey) {
+    console.error('No service key set; the scan cannot be attributed.');
+    return null;
+  }
+
+  const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
+  const { data, error } = await admin.rpc('resolve_scan_restaurant', {
+    p_table_id: tableId,
+    p_admin_id: adminId,
+  });
+
+  if (error) {
+    console.error('resolve_scan_restaurant failed:', error.message);
+    return null;
+  }
+  return (data as string | null) ?? null;
+}
+
 /** Cost in millionths of a dollar — integer money, as everywhere else here. */
 function costMicros(model: string, inputTokens: number, outputTokens: number): number {
   const price = PRICE_PER_MTOK[model];
@@ -115,16 +149,13 @@ function costMicros(model: string, inputTokens: number, outputTokens: number): n
  * the scan they just paid for. Failures are logged for the developer instead.
  */
 async function recordScan(params: {
-  tableId: string | null;
+  tableId: string;
   adminId: string;
   inputTokens: number;
   outputTokens: number;
   succeeded: boolean;
 }) {
-  if (!params.tableId) return;
-
-  const serviceKey =
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SECRET_KEY');
+  const serviceKey = getServiceKey();
   if (!serviceKey) {
     console.error('No service key set; the scan was not recorded.');
     return;
@@ -246,21 +277,32 @@ Deno.serve(async (req) => {
 
   let imageBase64: string;
   let mediaType: string;
-  // Optional: without it the scan still runs, it just cannot be attributed.
-  // The restaurant is resolved from this server-side, never sent by the client.
-  let tableId: string | null;
+  // Required. The restaurant is resolved from it server-side, never sent by
+  // the client, and a scan that cannot be attributed to one is refused rather
+  // than paid for.
+  let tableId: string;
 
   try {
     const body = await req.json();
     imageBase64 = String(body.image_base64 ?? '');
     mediaType = String(body.media_type ?? 'image/jpeg');
-    tableId = body.table_id ? String(body.table_id) : null;
+    tableId = body.table_id ? String(body.table_id) : '';
   } catch {
     return json({ error: 'Malformed request.' }, 400);
   }
 
   if (!imageBase64) {
     return json({ error: 'No photo was sent.' }, 400);
+  }
+
+  if (!tableId) {
+    return json({ error: 'A scan has to belong to a table.' }, 400);
+  }
+
+  // Also covers a table that belongs to somebody else: the answer is the same
+  // null, and so is the refusal. Nothing has been spent at this point.
+  if (!(await resolveRestaurant(tableId, user.id))) {
+    return json({ error: 'You cannot scan a receipt for that table.' }, 403);
   }
 
   // base64 carries 3 bytes per 4 characters.

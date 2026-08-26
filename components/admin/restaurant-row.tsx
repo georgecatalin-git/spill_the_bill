@@ -9,7 +9,7 @@ import { FormField } from '@/components/ui/form-field';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
-import type { OwnerRestaurantStat } from '@/lib/database';
+import type { AdminAccount, OwnerRestaurantStat } from '@/lib/database';
 import { isBlank } from '@/lib/validation';
 
 /**
@@ -42,11 +42,15 @@ type RestaurantRowProps = {
   stat: OwnerRestaurantStat;
   /** The other restaurants, as merge destinations. */
   mergeTargets: OwnerRestaurantStat[];
+  /** Every admin account, so access can be handed out without leaving the card. */
+  accounts: AdminAccount[];
   busy: boolean;
   onSave: (name: string, city: string) => Promise<void>;
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onGrant: (adminId: string) => Promise<void>;
+  onRevoke: (adminId: string) => Promise<void>;
 };
 
 /**
@@ -59,11 +63,14 @@ type RestaurantRowProps = {
 export function RestaurantRow({
   stat,
   mergeTargets,
+  accounts,
   busy,
   onSave,
   onToggleActive,
   onMerge,
   onDelete,
+  onGrant,
+  onRevoke,
 }: RestaurantRowProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const success = useThemeColor({}, 'success');
@@ -71,6 +78,7 @@ export function RestaurantRow({
 
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [showingAccess, setShowingAccess] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
   const [nameError, setNameError] = useState<string>();
@@ -84,6 +92,7 @@ export function RestaurantRow({
     setCityError(undefined);
     setError(null);
     setMerging(false);
+    setShowingAccess(false);
     setEditing(true);
   }
 
@@ -134,6 +143,18 @@ export function RestaurantRow({
       await onDelete();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not delete the restaurant.');
+    }
+  }
+
+  async function toggleAccess(account: AdminAccount, hasAccess: boolean) {
+    // Taking access away does not ask for confirmation: it breaks nothing that
+    // is already running — the refusal is on new tables only — and giving it
+    // back is one tap on this same list.
+    setError(null);
+    try {
+      await (hasAccess ? onRevoke(account.admin_id) : onGrant(account.admin_id));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not change access.');
     }
   }
 
@@ -212,6 +233,13 @@ export function RestaurantRow({
   // month ends rather than on the invoice afterwards.
   const overBudget = stat.scan_cost_micros_this_month / 1e6 / 1.08 > 15;
 
+  // The owner reaches every restaurant through `is_owner()`, so listing their
+  // own account here would offer a toggle that changes nothing.
+  const grantable = accounts.filter((account) => account.role !== 'owner');
+  const assigned = grantable.filter((account) =>
+    (account.restaurant_ids ?? []).includes(stat.restaurant_id)
+  );
+
   const mergeOptions: DropdownOption[] = mergeTargets.map((row) => ({
     value: row.restaurant_id,
     label: row.restaurant_name,
@@ -251,12 +279,64 @@ export function RestaurantRow({
           aceasta · {scanCost(stat.scan_cost_micros_this_month)}
           {overBudget ? ' — peste jumătate din abonament' : ''}
         </ThemedText>
+        <ThemedText
+          type="secondary"
+          style={[styles.figure, assigned.length === 0 && { color: warning }]}>
+          {assigned.length === 0
+            ? 'Nobody can open a table here yet'
+            : `${assigned.length} ${assigned.length === 1 ? 'account has' : 'accounts have'} access`}
+        </ThemedText>
       </View>
 
       {error && (
         <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
           {error}
         </ThemedText>
+      )}
+
+      {showingAccess && (
+        <View style={styles.accessBox}>
+          <ThemedText type="secondary" style={styles.figure}>
+            Who may open tables here:
+          </ThemedText>
+
+          {grantable.length === 0 ? (
+            <ThemedText type="secondary" style={styles.figure}>
+              No admin accounts have signed up yet.
+            </ThemedText>
+          ) : (
+            grantable.map((account) => {
+              const hasAccess = (account.restaurant_ids ?? []).includes(stat.restaurant_id);
+
+              return (
+                <View key={account.admin_id} style={styles.accessRow}>
+                  <View style={styles.accessWho}>
+                    <ThemedText style={styles.accessName}>
+                      {account.full_name ?? account.email}
+                    </ThemedText>
+                    <ThemedText type="secondary" style={styles.figure}>
+                      {account.email}
+                    </ThemedText>
+                  </View>
+
+                  <Pressable onPress={() => void toggleAccess(account, hasAccess)} disabled={busy}>
+                    <ThemedText
+                      type="secondary"
+                      style={[styles.link, hasAccess ? { color: warning } : { color: success }]}>
+                      {hasAccess ? 'Remove' : 'Give access'}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+
+          <Pressable onPress={() => setShowingAccess(false)}>
+            <ThemedText type="secondary" style={styles.link}>
+              Done
+            </ThemedText>
+          </Pressable>
+        </View>
       )}
 
       {merging ? (
@@ -281,6 +361,12 @@ export function RestaurantRow({
           <Pressable onPress={startEditing} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
               Edit
+            </ThemedText>
+          </Pressable>
+
+          <Pressable onPress={() => setShowingAccess((open) => !open)} disabled={busy}>
+            <ThemedText type="secondary" style={styles.link}>
+              Access
             </ThemedText>
           </Pressable>
 
@@ -348,6 +434,23 @@ const styles = StyleSheet.create({
   },
   mergeBox: {
     gap: Spacing.sm,
+  },
+  accessBox: {
+    gap: Spacing.sm,
+  },
+  accessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  accessWho: {
+    flex: 1,
+    gap: 2,
+  },
+  accessName: {
+    fontSize: 14,
+    lineHeight: 19,
   },
   editActions: {
     flexDirection: 'row',
