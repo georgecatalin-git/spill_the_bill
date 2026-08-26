@@ -41,10 +41,8 @@ export default function OwnerScreen() {
 
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
-  const [taxId, setTaxId] = useState('');
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
-  const [taxIdError, setTaxIdError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -62,27 +60,19 @@ export default function OwnerScreen() {
       return;
     }
 
-    // Not optional: the fiscal code is the whole check. A restaurant added
-    // without one cannot have a single receipt scanned at it.
-    if (isBlank(taxId)) {
-      setTaxIdError('Required — it is what a scanned receipt is checked against.');
-      return;
-    }
-
     setFormError(null);
     setPending(true);
     try {
-      await createRestaurant(name, city, taxId);
+      await createRestaurant(name, city);
       setName('');
       setCity('');
-      setTaxId('');
       await reload();
     } catch (caught) {
       setFormError(caught instanceof Error ? caught.message : 'Could not add the restaurant.');
     } finally {
       setPending(false);
     }
-  }, [name, city, taxId, reload]);
+  }, [name, city, reload]);
 
   const runOn = useCallback(
     async (restaurantId: string, action: () => Promise<void>) => {
@@ -206,9 +196,9 @@ export default function OwnerScreen() {
                   stat={stat}
                   mergeTargets={stats.filter((row) => row.restaurant_id !== stat.restaurant_id)}
                   busy={busyId === stat.restaurant_id}
-                  onSave={(nextName, nextCity, nextTaxId) =>
+                  onSave={(nextName, nextCity) =>
                     runOn(stat.restaurant_id, () =>
-                      updateRestaurant(stat.restaurant_id, nextName, nextCity, nextTaxId)
+                      updateRestaurant(stat.restaurant_id, nextName, nextCity)
                     )
                   }
                   onToggleActive={() =>
@@ -256,20 +246,6 @@ export default function OwnerScreen() {
                   error={cityError}
                 />
 
-                {/* Not required, because a place is often added before its
-                    paperwork is to hand. Without it, scans here cannot be
-                    checked against the receipt — the card says so. */}
-                <FormField
-                  label="Fiscal code (CUI)"
-                  value={taxId}
-                  onChangeText={(text) => {
-                    setTaxId(text);
-                    setTaxIdError(undefined);
-                  }}
-                  placeholder="RO12345678"
-                  autoCapitalize="characters"
-                  error={taxIdError}
-                />
 
                 {formError && (
                   <ThemedText type="secondary" style={{ color: warning }}>

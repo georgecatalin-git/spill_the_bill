@@ -129,6 +129,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826420000_a_table_is_opened_where_the_restaurant_is` | assignment out, perimeter in — both later removed, see below |
 | `20260826440000_search_by_name_and_demand_the_code` | perimeter out; the picker becomes a search box and the fiscal code becomes required |
 | `20260826460000_a_restaurant_without_a_code_cannot_scan` | the missing-code refusal moves before the API call |
+| `20260826480000_the_scanner_just_scans` | the whole receipt check comes back out; the scanner reads and nothing else |
 
 Regenerate types after any schema change:
 
@@ -641,67 +642,37 @@ was scored wrong for it. The test was measuring its own bug. Receipts vary in
 whether the sub-line spells out `3 x 48.00` or only `buc: 3`; the right column
 does not vary.
 
-## The receipt has to be from the restaurant that was picked
+## The receipt check that was built and removed
 
-Choosing the restaurant from the picker is a claim, not a fact. Somebody
-sitting in Sub Tâmpa could pick Italien and scan the Sub Tâmpa receipt: the
-items land on an Italien table and the scan's cost lands on Italien's figures,
-which are the figures the owner area exists to make trustworthy.
+For one day the scanner compared the fiscal code on the photo against
+`restaurants.tax_id`, with the printed name as a fallback, and refused a
+receipt from anywhere else. It is gone, and the reason is worth keeping.
 
-Nothing on a phone can prove where its owner is standing — which is why
-geofencing was rejected and stays rejected. But the receipt can, because it is
-a physical object printed by one particular business. **The proof was already
-in the photo and was being thrown away with the rest of the header.**
+It worked. It was not worth living with. Finding out that a photo shows no
+fiscal code costs a full scan — the paper has to be read before anything can be
+said about it — so every honest picture cropped to the item lines was paid for
+and then refused. A restaurant whose code nobody had typed in could not scan at
+all. Meanwhile the thing it prevented is worth about a cent, once: somebody
+refused gets nothing and stops trying.
 
-Two witnesses, in order of authority:
+Two rules from it, if it is ever rebuilt:
 
-**The fiscal code.** `restaurants.tax_id` holds the CUI/CIF, and a Romanian
-*bon fiscal* is required by law to print one. `normalise_tax_id` reduces both
-sides to digits, so `CUI: RO 12345678`, `C.I.F.12345678` and `RO12345678`
-compare equal — and so does an OCR that read a full stop as a comma, which is
-the likeliest way this would otherwise produce a false accusation. The owner has
-the code anyway; e-Factura cannot issue an invoice without it.
+- **Refuse only on contradiction, never on absence.** A code that could not be
+  read is not evidence. The version that refused on a missing code is what made
+  the ordinary case fail.
+- **Never charge to discover the paper was wrong.** Any check that needs the
+  photo read first has already spent the money by the time it can refuse.
 
-**The name**, when the code is missing on either side. The paper people
-actually photograph is often the *nota de plată* — the pre-bill, which is not a
-fiscal document and frequently prints only a trading name. `check_scan_receipt`
-therefore falls back to the name, under a rule that never guesses:
+`normalise_business_name` survives it and is now what the restaurant search box
+runs on. `normalise_tax_id`, `check_scan_receipt` and `restaurants.tax_id` were
+dropped in `20260826480000_the_scanner_just_scans`; the migrations that built
+them are still in the tree and describe the design in full.
 
-> refuse only when the receipt positively identifies a **different** restaurant
-> that is already on the list, and **exactly one** of them.
-
-A name we do not recognise proves nothing — it may be the legal entity behind
-the place everyone calls something shorter, "GASTRO INVEST SRL" for Italien —
-so it lets the scan through. And the match must be unique, because a chain
-shares a name across towns: "Loft" is both Loft Cluj and Loft București, the
-unique index allows exactly that, and an ambiguous answer is not proof. The
-consequence, worth knowing rather than discovering: **two branches of a chain
-cannot be told apart by name**, so a receipt moved between them scans through.
-Recording the fiscal codes is what closes that.
-
-`normalise_business_name` is conservative on purpose. Stripping more — dropping
-words like "restaurant" or "pizzeria" — would make two real places normalise to
-the same string, and a collision here does not cause a missed catch, it causes
-a false accusation against somebody holding a real receipt.
-
-**It refuses only on contradiction.** A code that could not be read, a
-restaurant whose code has not been recorded, a name nobody recognises: none of
-these is evidence, and all of them let the scan through. Turning away a real
-receipt because the photo was blurry is a worse failure than the one being
-prevented, and it happens to honest people at a table waiting to go home.
-
-The comparison lives in Postgres, not in the Edge Function, for the reason
-everything else does: two implementations of "is this the same code" would
-eventually disagree, and only one of them would be the one the owner's figures
-were built on.
-
-A mismatch is recorded as a **failed** scan. The tokens were spent, and a
-restaurant collecting refusals is exactly what somebody billing their receipts
-to it looks like from the owner's side. The message names the restaurant the
-receipt actually belongs to when that is one of ours, because the common
-version of this mistake is honest — the host picked the wrong line in the
-picker — and "this receipt is from Sub Tâmpa" turns a refusal into an
-instruction.
+Nothing on a phone can prove where its owner is standing — geofencing was tried
+and removed the same day, for a different reason: it could only be configured
+from inside the restaurant, which is a six-hundred-kilometre drive for a client
+in Arad. What remains is that a table can only name a restaurant the owner
+entered, and that every scan is attributed to one.
 
 ## Not built yet
 

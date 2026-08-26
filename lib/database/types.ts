@@ -409,7 +409,6 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
-          tax_id: string | null
           updated_at: string
         }
         Insert: {
@@ -418,7 +417,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
-          tax_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -427,7 +425,6 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
-          tax_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -861,6 +858,10 @@ export type Database = {
           new_quantity: number
         }[]
       }
+      admin_has_table_at: {
+        Args: { p_restaurant_id: string }
+        Returns: boolean
+      }
       admin_set_participant_claim: {
         Args: {
           p_bill_item_id: string
@@ -880,10 +881,6 @@ export type Database = {
           new_quantity: number
         }[]
       }
-      admin_has_table_at: {
-        Args: { p_restaurant_id: string }
-        Returns: boolean
-      }
       apply_assignment_status: {
         Args: { p_bill_id: string }
         Returns: undefined
@@ -902,19 +899,6 @@ export type Database = {
       }
       calculate_bill_subtotal: { Args: { p_bill_id: string }; Returns: number }
       calculate_bill_total: { Args: { p_bill_id: string }; Returns: number }
-      check_scan_receipt: {
-        Args: {
-          p_admin_id: string
-          p_receipt_name: string
-          p_receipt_tax_id: string
-          p_table_id: string
-        }
-        Returns: {
-          chosen_name: string
-          receipt_name: string
-          verdict: string
-        }[]
-      }
       claim_item: {
         Args: {
           p_bill_item_id: string
@@ -1125,7 +1109,6 @@ export type Database = {
         }[]
       }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
-      normalise_tax_id: { Args: { p_value: string }; Returns: string }
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string }
         Returns: undefined
@@ -1141,8 +1124,6 @@ export type Database = {
           city: string
           is_active: boolean
           last_activity_at: string
-          latitude: number
-          longitude: number
           participants_total: number
           restaurant_id: string
           restaurant_name: string
@@ -1150,7 +1131,6 @@ export type Database = {
           scans_this_month: number
           tables_active: number
           tables_total: number
-          tax_id: string
         }[]
       }
       owns_receipt_object: { Args: { p_object_name: string }; Returns: boolean }

@@ -43,7 +43,7 @@ type RestaurantRowProps = {
   /** The other restaurants, as merge destinations. */
   mergeTargets: OwnerRestaurantStat[];
   busy: boolean;
-  onSave: (name: string, city: string, taxId: string) => Promise<void>;
+  onSave: (name: string, city: string) => Promise<void>;
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -73,8 +73,7 @@ export function RestaurantRow({
   const [merging, setMerging] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
-  const [taxId, setTaxId] = useState(stat.tax_id ?? '');
-  const [taxIdError, setTaxIdError] = useState<string>();
+
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
   const [error, setError] = useState<string | null>(null);
@@ -82,9 +81,7 @@ export function RestaurantRow({
   function startEditing() {
     setName(stat.restaurant_name);
     setCity(stat.city);
-    setTaxId(stat.tax_id ?? '');
     setNameError(undefined);
-    setTaxIdError(undefined);
     setCityError(undefined);
     setError(null);
     setMerging(false);
@@ -105,16 +102,9 @@ export function RestaurantRow({
       return;
     }
 
-    // Without it no scan here can be checked, and the whole protection is the
-    // fiscal code. Refusing to save is the only thing that keeps that true.
-    if (isBlank(taxId)) {
-      setTaxIdError('Required — without it, receipts here cannot be checked.');
-      return;
-    }
-
     setError(null);
     try {
-      await onSave(name, city, taxId);
+      await onSave(name, city);
       setEditing(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save the restaurant.');
@@ -199,17 +189,6 @@ export function RestaurantRow({
           autoCapitalize="words"
           error={cityError}
         />
-        <FormField
-          label="Fiscal code (CUI)"
-          value={taxId}
-          onChangeText={(text) => {
-            setTaxId(text);
-            setTaxIdError(undefined);
-          }}
-          placeholder="RO12345678"
-          autoCapitalize="characters"
-          error={taxIdError}
-        />
 
         {error && (
           <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
@@ -273,13 +252,6 @@ export function RestaurantRow({
           aceasta · {scanCost(stat.scan_cost_micros_this_month)}
           {overBudget ? ' — peste jumătate din abonament' : ''}
         </ThemedText>
-        {/* The one field whose absence stops the app working here: without a
-            code to compare against, every scan at this restaurant is refused. */}
-        {!stat.tax_id && (
-          <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
-            No fiscal code — receipts here cannot be scanned. Add it.
-          </ThemedText>
-        )}
 
       </View>
 
