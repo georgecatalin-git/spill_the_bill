@@ -38,8 +38,21 @@ const RECEIPT_SCHEMA = {
       type: 'string',
       enum: ['EUR', 'RON', 'GBP', 'PLN', 'CHF', 'USD'],
     },
+    // Who printed this receipt. Read so the server can tell whether the photo
+    // came from the restaurant the table claims to be at. Empty strings rather
+    // than nulls: a nullable type is not something structured outputs promise
+    // to honour, and "" is unambiguous for a field that is text or absent.
+    merchant: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        tax_id: { type: 'string' },
+      },
+      required: ['name', 'tax_id'],
+      additionalProperties: false,
+    },
   },
-  required: ['items', 'total', 'currency'],
+  required: ['items', 'total', 'currency', 'merchant'],
   additionalProperties: false,
 } as const;
 
@@ -67,6 +80,20 @@ including tax and service. Not the sum of the item lines.
 
 currency: infer it from the symbol or code on the receipt. If nothing on the
 receipt indicates one, use EUR.
+
+merchant: the business that printed this piece of paper, read from the header.
+
+merchant.name is its name as printed. Many of these are not fiscal receipts at
+all but a pre-bill — a "nota de plată" — which usually prints the restaurant's
+trading name and nothing else. That name is what to return.
+
+merchant.tax_id is its fiscal registration code, labelled CUI, C.U.I., CIF or
+C.I.F. on Romanian receipts, sometimes with an RO prefix. Copy the digits
+exactly as printed, in order.
+
+Use an empty string for either field when it is not printed or not legible, and
+NEVER guess at either one. Both are compared against a record, and an invented
+value accuses an honest customer of holding somebody else's receipt.
 
 Read only what is there. If a line is illegible, leave it out rather than
 guessing at it — a missing line is obvious to the reviewer, an invented one is
@@ -134,6 +161,49 @@ async function resolveRestaurant(tableId: string, adminId: string): Promise<stri
   return (data as string | null) ?? null;
 }
 
+/**
+ * Whether the receipt was printed by the restaurant the table says it is at.
+ *
+ * The comparison itself is in Postgres, not here: two implementations of "is
+ * this the same fiscal code" would eventually disagree, and only one of them
+ * would be the one the owner's figures were built on.
+ *
+ * A failure to ask is treated as `unknown` rather than as a refusal. This
+ * check exists to catch a receipt from somewhere else, and a database hiccup
+ * is not evidence of that — the admin has already paid for the scan by the
+ * time this runs.
+ */
+async function checkReceiptOrigin(
+  tableId: string,
+  adminId: string,
+  receiptTaxId: string,
+  receiptName: string
+): Promise<ScanVerdict> {
+  const unknown: ScanVerdict = { verdict: 'unknown', chosen_name: null, receipt_name: null };
+
+  const serviceKey = getServiceKey();
+  if (!serviceKey) return unknown;
+
+  try {
+    const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
+    const { data, error } = await admin.rpc('check_scan_receipt', {
+      p_table_id: tableId,
+      p_admin_id: adminId,
+      p_receipt_tax_id: receiptTaxId,
+      p_receipt_name: receiptName,
+    });
+
+    if (error) {
+      console.error('check_scan_receipt failed:', error.message);
+      return unknown;
+    }
+    return (data as ScanVerdict[])[0] ?? unknown;
+  } catch (error) {
+    console.error('check_scan_receipt threw:', error);
+    return unknown;
+  }
+}
+
 /** Cost in millionths of a dollar — integer money, as everywhere else here. */
 function costMicros(model: string, inputTokens: number, outputTokens: number): number {
   const price = PRICE_PER_MTOK[model];
@@ -185,7 +255,19 @@ const CORS_HEADERS = {
 };
 
 type ParsedItem = { name: string; quantity: number; unit_price: number };
-type ParsedReceipt = { items: ParsedItem[]; total: number; currency: string };
+type ParsedMerchant = { name: string; tax_id: string };
+type ParsedReceipt = {
+  items: ParsedItem[];
+  total: number;
+  currency: string;
+  merchant: ParsedMerchant;
+};
+
+type ScanVerdict = {
+  verdict: 'no_table' | 'unknown' | 'ok' | 'mismatch';
+  chosen_name: string | null;
+  receipt_name: string | null;
+};
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -367,6 +449,32 @@ Deno.serve(async (req) => {
 
     const receipt = JSON.parse(text.text) as ParsedReceipt;
     validate(receipt);
+
+    // Checked before the empty-items case below, because "this is the wrong
+    // restaurant" explains an empty result as well as a full one, and it is
+    // the more useful thing to be told.
+    const origin = await checkReceiptOrigin(
+      tableId,
+      user.id,
+      receipt.merchant?.tax_id ?? '',
+      receipt.merchant?.name ?? ''
+    );
+
+    if (origin.verdict === 'mismatch') {
+      // Recorded, and recorded as failed: the tokens were spent, and a
+      // restaurant collecting refusals is exactly what somebody billing their
+      // receipts to it looks like from the owner's side.
+      await recordScan({ ...usage, succeeded: false });
+
+      return json(
+        {
+          error: origin.receipt_name
+            ? `This receipt was printed by ${origin.receipt_name}, and this table is at ${origin.chosen_name}. Start the table at ${origin.receipt_name} instead.`
+            : `This receipt was not printed by ${origin.chosen_name}. Check that the table is at the right restaurant.`,
+        },
+        409
+      );
+    }
 
     // A reply with no items is a valid answer to "what is on this receipt" —
     // it is what a photo of a laptop, or a hand, correctly produces. But it

@@ -442,6 +442,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          tax_id: string | null
           updated_at: string
         }
         Insert: {
@@ -450,6 +451,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          tax_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -458,6 +460,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          tax_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -936,6 +939,19 @@ export type Database = {
       }
       calculate_bill_subtotal: { Args: { p_bill_id: string }; Returns: number }
       calculate_bill_total: { Args: { p_bill_id: string }; Returns: number }
+      check_scan_receipt: {
+        Args: {
+          p_admin_id: string
+          p_receipt_name: string
+          p_receipt_tax_id: string
+          p_table_id: string
+        }
+        Returns: {
+          chosen_name: string
+          receipt_name: string
+          verdict: string
+        }[]
+      }
       claim_item: {
         Args: {
           p_bill_item_id: string
@@ -1132,6 +1148,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          tax_id: string | null
           updated_at: string
         }[]
         SetofOptions: {
@@ -1162,6 +1179,8 @@ export type Database = {
           participant_id: string
         }[]
       }
+      normalise_business_name: { Args: { p_value: string }; Returns: string }
+      normalise_tax_id: { Args: { p_value: string }; Returns: string }
       owner_assign_restaurant: {
         Args: { p_admin_id: string; p_restaurant_id: string }
         Returns: undefined
@@ -1198,6 +1217,7 @@ export type Database = {
           scans_this_month: number
           tables_active: number
           tables_total: number
+          tax_id: string
         }[]
       }
       owner_revoke_restaurant: {

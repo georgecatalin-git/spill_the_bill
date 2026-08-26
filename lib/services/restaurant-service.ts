@@ -12,6 +12,16 @@ import { supabase } from '@/lib/supabase';
 
 export class RestaurantServiceError extends Error {}
 
+/**
+ * An empty fiscal code is stored as null rather than as "".
+ *
+ * The column's check constraint refuses a blank string, and null is what the
+ * comparison already reads as "nothing recorded, so nothing to check".
+ */
+function toTaxId(value: string): string | null {
+  return value.trim() || null;
+}
+
 function toFriendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
 
@@ -38,10 +48,14 @@ export async function listActiveRestaurants(): Promise<Restaurant[]> {
   return data ?? [];
 }
 
-export async function createRestaurant(name: string, city: string): Promise<Restaurant> {
+export async function createRestaurant(
+  name: string,
+  city: string,
+  taxId: string
+): Promise<Restaurant> {
   const { data, error } = await supabase
     .from('restaurants')
-    .insert({ name: name.trim(), city: city.trim() })
+    .insert({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
     .select()
     .single();
 
@@ -59,15 +73,16 @@ export async function createRestaurant(name: string, city: string): Promise<Rest
   return data;
 }
 
-/** Corrects a name or a town. Owner only — RLS refuses everyone else. */
+/** Corrects a name, a town or the fiscal code. Owner only — RLS refuses everyone else. */
 export async function updateRestaurant(
   restaurantId: string,
   name: string,
-  city: string
+  city: string,
+  taxId: string
 ): Promise<void> {
   const { error } = await supabase
     .from('restaurants')
-    .update({ name: name.trim(), city: city.trim() })
+    .update({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
     .eq('id', restaurantId);
 
   if (error) {

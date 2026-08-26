@@ -45,7 +45,7 @@ type RestaurantRowProps = {
   /** Every admin account, so access can be handed out without leaving the card. */
   accounts: AdminAccount[];
   busy: boolean;
-  onSave: (name: string, city: string) => Promise<void>;
+  onSave: (name: string, city: string, taxId: string) => Promise<void>;
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -81,6 +81,7 @@ export function RestaurantRow({
   const [showingAccess, setShowingAccess] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
+  const [taxId, setTaxId] = useState(stat.tax_id ?? '');
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +89,7 @@ export function RestaurantRow({
   function startEditing() {
     setName(stat.restaurant_name);
     setCity(stat.city);
+    setTaxId(stat.tax_id ?? '');
     setNameError(undefined);
     setCityError(undefined);
     setError(null);
@@ -112,7 +114,7 @@ export function RestaurantRow({
 
     setError(null);
     try {
-      await onSave(name, city);
+      await onSave(name, city, taxId);
       setEditing(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save the restaurant.');
@@ -209,6 +211,13 @@ export function RestaurantRow({
           autoCapitalize="words"
           error={cityError}
         />
+        <FormField
+          label="Fiscal code (CUI)"
+          value={taxId}
+          onChangeText={setTaxId}
+          placeholder="RO12345678"
+          autoCapitalize="characters"
+        />
 
         {error && (
           <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
@@ -279,6 +288,13 @@ export function RestaurantRow({
           aceasta · {scanCost(stat.scan_cost_micros_this_month)}
           {overBudget ? ' — peste jumătate din abonament' : ''}
         </ThemedText>
+        {/* The one field whose absence has a consequence worth naming: with
+            no code recorded, a receipt from anywhere else scans through. */}
+        {!stat.tax_id && (
+          <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
+            No fiscal code — receipts here cannot be checked
+          </ThemedText>
+        )}
         <ThemedText
           type="secondary"
           style={[styles.figure, assigned.length === 0 && { color: warning }]}>

@@ -124,6 +124,8 @@ Migrations are the source of truth and are applied in order:
 | `20260826320000_host_assigns_items` | the host records orders for people who have no app |
 | `20260826340000_remaining_excludes_the_tip` | "remaining" stops counting the tip as unowned |
 | `20260826360000_restaurants_have_admins` | only an account the owner has assigned may open tables at a restaurant |
+| `20260826380000_the_receipt_names_its_own_restaurant` | the fiscal code on the receipt is checked against the restaurant |
+| `20260826400000_the_receipt_may_only_have_a_name` | the name as fallback, when the paper is a pre-bill and carries no code |
 
 Regenerate types after any schema change:
 
@@ -630,6 +632,68 @@ always the line total — so every model divided by the quantity, correctly, and
 was scored wrong for it. The test was measuring its own bug. Receipts vary in
 whether the sub-line spells out `3 x 48.00` or only `buc: 3`; the right column
 does not vary.
+
+## The receipt has to be from the restaurant that was picked
+
+Choosing the restaurant from the picker is a claim, not a fact. Somebody
+sitting in Sub Tâmpa could pick Italien and scan the Sub Tâmpa receipt: the
+items land on an Italien table and the scan's cost lands on Italien's figures,
+which are the figures the owner area exists to make trustworthy.
+
+Nothing on a phone can prove where its owner is standing — which is why
+geofencing was rejected and stays rejected. But the receipt can, because it is
+a physical object printed by one particular business. **The proof was already
+in the photo and was being thrown away with the rest of the header.**
+
+Two witnesses, in order of authority:
+
+**The fiscal code.** `restaurants.tax_id` holds the CUI/CIF, and a Romanian
+*bon fiscal* is required by law to print one. `normalise_tax_id` reduces both
+sides to digits, so `CUI: RO 12345678`, `C.I.F.12345678` and `RO12345678`
+compare equal — and so does an OCR that read a full stop as a comma, which is
+the likeliest way this would otherwise produce a false accusation. The owner has
+the code anyway; e-Factura cannot issue an invoice without it.
+
+**The name**, when the code is missing on either side. The paper people
+actually photograph is often the *nota de plată* — the pre-bill, which is not a
+fiscal document and frequently prints only a trading name. `check_scan_receipt`
+therefore falls back to the name, under a rule that never guesses:
+
+> refuse only when the receipt positively identifies a **different** restaurant
+> that is already on the list, and **exactly one** of them.
+
+A name we do not recognise proves nothing — it may be the legal entity behind
+the place everyone calls something shorter, "GASTRO INVEST SRL" for Italien —
+so it lets the scan through. And the match must be unique, because a chain
+shares a name across towns: "Loft" is both Loft Cluj and Loft București, the
+unique index allows exactly that, and an ambiguous answer is not proof. The
+consequence, worth knowing rather than discovering: **two branches of a chain
+cannot be told apart by name**, so a receipt moved between them scans through.
+Recording the fiscal codes is what closes that.
+
+`normalise_business_name` is conservative on purpose. Stripping more — dropping
+words like "restaurant" or "pizzeria" — would make two real places normalise to
+the same string, and a collision here does not cause a missed catch, it causes
+a false accusation against somebody holding a real receipt.
+
+**It refuses only on contradiction.** A code that could not be read, a
+restaurant whose code has not been recorded, a name nobody recognises: none of
+these is evidence, and all of them let the scan through. Turning away a real
+receipt because the photo was blurry is a worse failure than the one being
+prevented, and it happens to honest people at a table waiting to go home.
+
+The comparison lives in Postgres, not in the Edge Function, for the reason
+everything else does: two implementations of "is this the same code" would
+eventually disagree, and only one of them would be the one the owner's figures
+were built on.
+
+A mismatch is recorded as a **failed** scan. The tokens were spent, and a
+restaurant collecting refusals is exactly what somebody billing their receipts
+to it looks like from the owner's side. The message names the restaurant the
+receipt actually belongs to when that is one of ours, because the common
+version of this mistake is honest — the host picked the wrong line in the
+picker — and "this receipt is from Sub Tâmpa" turns a refusal into an
+instruction.
 
 ## Not built yet
 
