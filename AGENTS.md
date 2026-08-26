@@ -106,6 +106,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826200000_restaurants_require_a_city` | the city becomes mandatory, closing the uniqueness hole |
 | `20260826220000_restaurants_grants_match_the_rules` | the grants on `restaurants` stop contradicting the policies |
 | `20260826240000_receipt_scan_log` | what each restaurant costs in receipt-reading |
+| `20260826260000_leaving_a_table_revokes_reading` | a guest who left stops seeing the table |
 
 Regenerate types after any schema change:
 
@@ -139,6 +140,19 @@ remembering:
   therefore fails on *every* write rather than only the ones it means to
   refuse — and the error it raises is `permission denied for function …`,
   which reads nothing like the rule being enforced.
+
+`leave_table` revokes reading, not only writing. Every write path checked
+`is_active`, but `resolve_guest_session` did not — and every read goes through
+it, so a guest who left kept the item list, everyone's name, what each person
+owed, who had paid, and the path to the receipt photo. Permanently, since the
+token is never rotated. The check now lives in the resolver: one place to be
+right, and no way to add a sixteenth reader that forgets.
+
+Two callers pass `p_require_active => false` and must keep doing so.
+`validate_guest_session` *reports* the flag — that is how the app offers "you
+left, join again?" instead of a dead end — and `leave_table` stays idempotent.
+Rejoining is unaffected: `join_table` reactivates an existing token without
+going through the resolver.
 
 Closed bills are frozen in the database, not only in the UI: `bill_items`,
 `bills` and claim deletion all refuse once a bill is `COMPLETED`. A
