@@ -142,6 +142,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827180000_a_restaurant_has_one_admin` | `restaurants.admin_user_id`, and a restaurant admin sees its splits |
 | `20260827200000_one_definition_of_which_restaurant` | `venue_by_code` dropped; the picker asks the same function the gate does |
 | `20260827220000_a_restaurant_admin_has_a_dashboard` | the restaurant sees its own figures, code and details |
+| `20260827240000_a_new_bill_can_be_read_back` | a SELECT policy must read the row's columns, not look the row up |
 
 Regenerate types after any schema change:
 
@@ -149,8 +150,17 @@ Regenerate types after any schema change:
 npx supabase gen types typescript --project-id <project-id> > lib/database/types.ts
 ```
 
-Three Postgres traps this project has already been bitten by, worth
+Four Postgres traps this project has already been bitten by, worth
 remembering:
+
+- **A SELECT policy that has to *find* the row cannot also guard the row's own
+  creation.** Every insert PostgREST makes is `INSERT ... RETURNING`, so the
+  SELECT policy runs on the new row — and a `STABLE SECURITY DEFINER` helper
+  that looks the row up by id does not see it yet, because it is not committed.
+  The whole insert then comes back as 403. `is_bill_admin(id)` did exactly this
+  when it replaced `is_table_admin(table_id)` in the bills read policy: bills
+  stopped being creatable at all. Read the row's own columns
+  (`table_id`), never look the row up.
 
 - A column-level `REVOKE` does nothing while the role still holds a table-wide
   `SELECT`. Revoke the table privilege, then grant the safe columns back.
