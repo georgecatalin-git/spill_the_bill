@@ -442,7 +442,7 @@ export type Database = {
       }
       tables: {
         Row: {
-          admin_id: string
+          admin_id: string | null
           created_at: string
           id: string
           invite_code: string
@@ -452,7 +452,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          admin_id: string
+          admin_id?: string | null
           created_at?: string
           id?: string
           invite_code?: string
@@ -462,7 +462,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          admin_id?: string
+          admin_id?: string | null
           created_at?: string
           id?: string
           invite_code?: string
@@ -947,6 +947,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_my_account: { Args: never; Returns: undefined }
       generate_invite_code: { Args: { p_length?: number }; Returns: string }
       generate_session_token: { Args: never; Returns: string }
       get_admin_participant_id: {
@@ -1121,6 +1122,7 @@ export type Database = {
       }
       my_restaurant_id: { Args: never; Returns: string }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
+      owner_delete_admin: { Args: { p_admin_id: string }; Returns: undefined }
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string }
         Returns: undefined
@@ -1134,6 +1136,7 @@ export type Database = {
           restaurant_id: string
           restaurant_name: string
           role: string
+          tables_total: number
         }[]
       }
       owner_merge_restaurants: {

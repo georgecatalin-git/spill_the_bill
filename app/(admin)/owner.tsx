@@ -24,6 +24,7 @@ import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import {
   createRestaurant,
+  deleteAdminAccount,
   setAdminRestaurant,
   deleteRestaurant,
   mergeRestaurants,
@@ -242,6 +243,9 @@ export default function OwnerScreen() {
                     key={account.admin_id}
                     account={account}
                     options={restaurantOptions}
+                    onDelete={() =>
+                      runOn(account.admin_id, () => deleteAdminAccount(account.admin_id))
+                    }
                     onLink={(restaurantId) =>
                       // Keyed on the restaurant so the spinner lands on the card
                       // being changed; unlinking has no card, hence the account.

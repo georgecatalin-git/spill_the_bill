@@ -219,3 +219,27 @@ export async function setAdminRestaurant(
     throw toFriendlyError(error, 'Could not link the account.');
   }
 }
+
+/**
+ * Removes somebody else's account. Owner only.
+ *
+ * The tables they opened stay with the restaurant — `tables.admin_id` is
+ * `set null`, deliberately, because that history is the restaurant's and not
+ * the waiter's. Nobody can act on those tables afterwards, which is correct:
+ * the person who could is gone.
+ */
+export async function deleteAdminAccount(adminId: string): Promise<void> {
+  const { error } = await supabase.rpc('owner_delete_admin', { p_admin_id: adminId });
+
+  if (error) {
+    // The server's refusals are already written for a person to read.
+    if (
+      error.message.includes('Only the owner') ||
+      error.message.includes('your own account') ||
+      error.message.includes('owner account cannot')
+    ) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not delete the account.');
+  }
+}

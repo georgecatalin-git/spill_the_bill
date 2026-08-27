@@ -1,10 +1,11 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/card';
 import { Dropdown, type DropdownOption } from '@/components/ui/dropdown';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { confirmAction } from '@/lib/confirm';
 import type { AdminAccount } from '@/lib/database';
 
 type AccountRowProps = {
@@ -12,6 +13,7 @@ type AccountRowProps = {
   /** Every restaurant, as somewhere this account could belong. */
   options: DropdownOption[];
   onLink: (restaurantId: string | null) => Promise<void>;
+  onDelete: () => Promise<void>;
 };
 
 /**
@@ -22,7 +24,7 @@ type AccountRowProps = {
  * anywhere else. So this dropdown is the whole of the control, and an account
  * left unlinked simply cannot open a table.
  */
-export function AccountRow({ account, options, onLink }: AccountRowProps) {
+export function AccountRow({ account, options, onLink, onDelete }: AccountRowProps) {
   const warning = useThemeColor({}, 'warning');
   const textSecondary = useThemeColor({}, 'textSecondary');
 
@@ -42,6 +44,30 @@ export function AccountRow({ account, options, onLink }: AccountRowProps) {
         </ThemedText>
       </Card>
     );
+  }
+
+  async function confirmDelete() {
+    // The warning names what survives rather than asking "are you sure". What
+    // this destroys is one login; what it deliberately does not destroy is the
+    // restaurant's record, and that is the part somebody would worry about.
+    const kept =
+      account.tables_total > 0
+        ? `The ${account.tables_total} ${
+            account.tables_total === 1 ? 'table' : 'tables'
+          } opened by this account stay with ${
+            account.restaurant_name ?? 'the restaurant'
+          }, but nobody will be able to act on them again.`
+        : 'This account has never opened a table, so nothing else changes.';
+
+    const confirmed = await confirmAction({
+      title: `Delete ${account.full_name ?? account.email}?`,
+      message: `The login, the name and the email are removed for good.\n\n${kept}`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+    await onDelete();
   }
 
   return (
@@ -65,6 +91,18 @@ export function AccountRow({ account, options, onLink }: AccountRowProps) {
         onChange={(id) => void onLink(id || null)}
         placeholder="Link to a restaurant"
       />
+
+      <View style={styles.actions}>
+        <ThemedText type="secondary" style={styles.line}>
+          {account.tables_total} {account.tables_total === 1 ? 'table' : 'tables'} opened
+        </ThemedText>
+
+        <Pressable onPress={() => void confirmDelete()}>
+          <ThemedText type="secondary" style={[styles.link, { color: warning }]}>
+            Delete account
+          </ThemedText>
+        </Pressable>
+      </View>
     </Card>
   );
 }
@@ -74,4 +112,11 @@ const styles = StyleSheet.create({
   who: { gap: 2 },
   name: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
   line: { fontSize: 13 },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  link: { fontSize: 13, textDecorationLine: 'underline' },
 });

@@ -40,3 +40,25 @@ export async function getProfile(): Promise<Profile | null> {
   if (error) throw toFriendlyError(error, 'Could not load your profile.');
   return data;
 }
+
+/**
+ * Deletes the signed-in account: the login, the name, the email.
+ *
+ * The tables this account opened are NOT deleted. They belong to the
+ * restaurant, and the figures behind them are what the owner area exists to
+ * show — losing months of a restaurant's activity because a waiter left would
+ * be the wrong thing to do to somebody who is still a customer.
+ *
+ * The session is dead the moment this returns, so the caller signs out rather
+ * than leaving the app holding a token for an account that no longer exists.
+ */
+export async function deleteMyAccount(): Promise<void> {
+  const { error } = await supabase.rpc('delete_my_account');
+
+  if (error) {
+    if (error.message.includes('owner account cannot')) {
+      throw new ProfileServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not delete your account.');
+  }
+}

@@ -131,6 +131,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826460000_a_restaurant_without_a_code_cannot_scan` | the missing-code refusal moves before the API call |
 | `20260826480000_the_scanner_just_scans` | the whole receipt check comes back out; the scanner reads and nothing else |
 | `20260827000000_an_account_belongs_to_a_restaurant` | the account *is* the restaurant's; a table cannot be opened anywhere else |
+| `20260827020000_accounts_can_be_deleted` | an account can be removed, and the restaurant keeps its tables |
 
 Regenerate types after any schema change:
 
@@ -560,6 +561,28 @@ it can act on.
 
 The New Table screen shows the restaurant as a fact, not a field. Only the
 owner still gets the search box.
+
+**Deleting an account keeps the restaurant's history.** `tables.admin_id`
+cascaded from `profiles`, so a waiter who left and removed their account would
+have taken months of the restaurant's activity with them — every table, and
+with them the bills, the participants and the claims. That is the evidence the
+owner area exists to produce, and it belongs to the restaurant rather than to
+whoever was holding the phone. The link is `set null` instead: the tables stay,
+with no administrator, and nobody can act on them again — every policy on
+`tables` reads `admin_id = auth.uid()`, and null matches nobody, which is the
+right outcome rather than a gap.
+
+Two routes, both `SECURITY DEFINER` because deleting the `auth.users` row is
+what actually removes an account and no client role has business in the auth
+schema. `delete_my_account` is Profile → Delete Account; `owner_delete_admin`
+is the Owner tab. Each refuses an owner account, and the owner's refuses
+deleting itself — losing the one account that curates restaurants and links
+staff is not something the app should be able to do.
+
+Storage is deliberately untouched. Receipt photos live in a bucket, the tables
+survive here anyway, and this project has already learned that deleting storage
+objects from Postgres raises inside `storage.protect_delete` and takes the
+parent row down with it.
 
 ## Typed, not listed — and no scan without the code
 
