@@ -59,6 +59,11 @@ export default function NewTableScreen() {
   // of the restaurant in somebody's notes and gets used from home. Typing one
   // by hand is different: they already know it, and hiding it would only hide
   // their own typos.
+  //
+  // There is deliberately no way back to the field from a scan. Somebody who
+  // scanned the sticker in front of them has the right restaurant already, and
+  // an "enter a different code" link only ever invited them to pick a wrong
+  // one.
   const [typingCode, setTypingCode] = useState(!scannedCode);
   const [hostName, setHostName] = useState('');
   const [hostNameError, setHostNameError] = useState<string>();
@@ -297,19 +302,6 @@ export default function NewTableScreen() {
                       <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
                         That code does not open a table here.
                       </ThemedText>
-                    )}
-
-                    {!typingCode && (
-                      <Pressable
-                        onPress={() => {
-                          setTypingCode(true);
-                          setVenueCode('');
-                          setRestaurantError(undefined);
-                        }}>
-                        <ThemedText type="secondary" style={styles.switch}>
-                          Enter a different code
-                        </ThemedText>
-                      </Pressable>
                     )}
 
                     {canLeaveCodeMode && (
