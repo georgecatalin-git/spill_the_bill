@@ -144,10 +144,10 @@ export default function TableScreen() {
           <Card style={styles.inviteCard}>
             <View style={styles.inviteCopy}>
               <ThemedText type="subtitle" style={styles.inviteTitle}>
-                Invite your friends
+                Bring the table in
               </ThemedText>
               <ThemedText type="secondary">
-                Share the link with everyone at the table.
+                Give the guests the link or the code. They join with a first name.
               </ThemedText>
             </View>
             <Button label="Invite People" onPress={() => setInvitationVisible(true)} />

@@ -382,6 +382,12 @@ session.
 Eight steps shown once, the first time an admin reaches the app: the table,
 the bill, the invitation, claiming, the live totals, settling up.
 
+**It is written for the restaurant's own staff**, because that is who the
+account belongs to. It used to read as though the host were one of the diners —
+"invite your friends" — which stopped being true when the restaurant became a
+property of the account rather than something picked per table. The guests
+still tick their own items; they are simply not the ones who start.
+
 **It is a drawing of the app, not the app.** Every mock control is a plain
 `View` rather than a `Pressable`, so a curious tap does nothing at all instead
 of something surprising, and no table, bill or claim is touched. The figures
