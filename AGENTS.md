@@ -135,6 +135,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827040000_a_code_on_the_table_opens_a_table` | a customer opens a table with the code printed in the restaurant |
 | `20260827060000_a_linked_account_ignores_other_codes` | a restaurant's own account cannot be sent elsewhere by a code |
 | `20260827080000_the_receipt_must_belong_to_the_session` | the fiscal code on the paper must be the session restaurant's |
+| `20260827100000_restaurants_have_a_lifecycle_and_tables` | PENDING → ACTIVE → SUSPENDED → INACTIVE, and one code per physical table |
 
 Regenerate types after any schema change:
 
@@ -654,6 +655,41 @@ Storage is deliberately untouched. Receipt photos live in a bucket, the tables
 survive here anyway, and this project has already learned that deleting storage
 objects from Postgres raises inside `storage.protect_delete` and takes the
 parent row down with it.
+
+## A restaurant has a lifecycle, and tables
+
+`is_active` said only yes or no. A place entered during a demo but not yet
+signed, one whose contract ended, and one taken down for a problem are three
+different things, and onboarding needs to tell them apart — so `status` is now
+the truth: **PENDING · ACTIVE · SUSPENDED · INACTIVE**, and new restaurants
+start PENDING.
+
+**`is_active` survives as a generated column** off `status`. Everything that
+already read it — both triggers on `tables`, the search box, the code
+resolver, the receipt gate, the owner's figures — keeps working untouched, and
+the two cannot drift apart, which is the failure a second boolean would have
+invited. Read `is_active` freely; write `status`, through
+`owner_set_restaurant_status`.
+
+Only ACTIVE serves, and **only a restaurant with `tax_id` may be ACTIVE** — a
+check constraint, because without a code no receipt of theirs could ever be
+validated.
+
+**`restaurant_tables` is the furniture**, and is deliberately not `tables`.
+`tables` is the *session*: a party sitting down, with its bill and its
+participants. A physical table outlives every session held at it, and its code
+is printed once and stuck down. `tables.restaurant_table_id` records which seat
+a session was opened at.
+
+`resolve_venue_code` answers for **both kinds of printed code** — a
+restaurant-wide one on a poster, or a table's own — because the customer
+presenting one neither knows nor cares which it is. Both are refused unless the
+restaurant is ACTIVE, and a table code is refused if that table has been
+retired. **A wrong code, a retired table and a restaurant that is not ACTIVE
+all give the same sentence**, so guessing teaches a stranger nothing.
+
+Retiring a table does not un-print its sticker, and cannot. The database stops
+honouring the code instead.
 
 ## The receipt must belong to the session
 

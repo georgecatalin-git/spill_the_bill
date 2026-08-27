@@ -1,4 +1,10 @@
-import type { AdminAccount, OwnerRestaurantStat, RestaurantMatch } from '@/lib/database';
+import type {
+  AdminAccount,
+  OwnerRestaurantStat,
+  RestaurantMatch,
+  RestaurantStatus,
+  RestaurantTable,
+} from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -122,23 +128,36 @@ export async function mergeRestaurants(sourceId: string, targetId: string): Prom
   }
 }
 
-/** Takes a restaurant out of the picker without losing the tables behind it. */
-export async function setRestaurantActive(
+/**
+ * Moves a restaurant through its life with Split: PENDING while it is only a
+ * prospect, ACTIVE once the contract is signed, SUSPENDED or INACTIVE after.
+ *
+ * `is_active` is generated from this in the database, so it cannot be written
+ * directly and the two can never disagree. Only ACTIVE serves customers, and
+ * only a restaurant whose fiscal code is on file may become ACTIVE.
+ */
+export async function setRestaurantStatus(
   restaurantId: string,
-  isActive: boolean
+  status: RestaurantStatus
 ): Promise<void> {
-  const { error } = await supabase
-    .from('restaurants')
-    .update({ is_active: isActive })
-    .eq('id', restaurantId);
+  const { error } = await supabase.rpc('owner_set_restaurant_status', {
+    p_restaurant_id: restaurantId,
+    p_status: status,
+  });
 
-  if (error) throw toFriendlyError(error, 'Could not update the restaurant.');
+  if (error) {
+    // The server writes both of these for a person to read.
+    if (error.message.includes('fiscal code') || error.message.includes('Only the owner')) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not update the restaurant.');
+  }
 }
 
 /**
  * Removes a restaurant and everything behind it, permanently.
  *
- * For a contract that has ended for good. `setRestaurantActive(id, false)` is
+ * For a contract that has ended for good. `setRestaurantStatus(id, 'INACTIVE')` is
  * the gentler option and keeps the history, which is usually what a place
  * going quiet actually calls for.
  */
@@ -298,4 +317,64 @@ export async function rotateVenueCode(restaurantId: string): Promise<string> {
     throw toFriendlyError(error, 'Could not issue a new code.');
   }
   return data as string;
+}
+
+/** The physical tables of one restaurant, with the code printed on each. */
+export async function listRestaurantTables(restaurantId: string): Promise<RestaurantTable[]> {
+  const { data, error } = await supabase.rpc('owner_list_tables', {
+    p_restaurant_id: restaurantId,
+  });
+
+  if (error) {
+    if (error.message.includes('Only the owner')) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not load the tables.');
+  }
+  return data ?? [];
+}
+
+/** Adds one physical table and gives it the code that gets printed on it. */
+export async function addRestaurantTable(
+  restaurantId: string,
+  label: string
+): Promise<void> {
+  const { error } = await supabase.rpc('owner_add_table', {
+    p_restaurant_id: restaurantId,
+    p_label: label,
+  });
+
+  if (error) {
+    if (
+      error.message.includes('Only the owner') ||
+      error.message.includes('already has a table') ||
+      error.message.includes('Please name')
+    ) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not add the table.');
+  }
+}
+
+/**
+ * Retires or restores one physical table.
+ *
+ * The sticker stays on the furniture — it cannot be un-printed — so the
+ * database stops honouring the code instead.
+ */
+export async function setRestaurantTableActive(
+  tableId: string,
+  isActive: boolean
+): Promise<void> {
+  const { error } = await supabase.rpc('owner_set_table_active', {
+    p_table_id: tableId,
+    p_active: isActive,
+  });
+
+  if (error) {
+    if (error.message.includes('Only the owner')) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not update the table.');
+  }
 }

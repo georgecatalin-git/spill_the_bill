@@ -29,7 +29,7 @@ import {
   setAdminRestaurant,
   deleteRestaurant,
   mergeRestaurants,
-  setRestaurantActive,
+  setRestaurantStatus,
   updateRestaurant,
 } from '@/lib/services/restaurant-service';
 import { useAdminAccounts } from '@/lib/services/use-admin-accounts';
@@ -224,7 +224,13 @@ export default function OwnerScreen() {
                   }
                   onToggleActive={() =>
                     runOn(stat.restaurant_id, () =>
-                      setRestaurantActive(stat.restaurant_id, !stat.is_active)
+                      // PENDING rather than INACTIVE when standing a place
+                      // down: most of the time it is a prospect that has not
+                      // signed yet, not a contract that ended.
+                      setRestaurantStatus(
+                        stat.restaurant_id,
+                        stat.is_active ? 'PENDING' : 'ACTIVE'
+                      )
                     )
                   }
                   onMerge={(targetId) =>
