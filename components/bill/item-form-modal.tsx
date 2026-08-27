@@ -18,6 +18,19 @@ type ItemFormModalProps = {
   initialName?: string;
   initialPriceCents?: number;
   initialQuantity?: number;
+  /**
+   * Whether to ask for a quantity.
+   *
+   * Off when adding by hand: a round is three taps of "beer" rather than one
+   * line of three, which is faster to enter while the order is happening and
+   * leaves each drink claimable on its own — no "3 of 4 claimed" to work out.
+   * The split lands in the same place either way.
+   *
+   * On when editing, because the scanner does produce quantities — a receipt
+   * line reading "3 Cola 7.50" comes back as three — and those have to stay
+   * correctable.
+   */
+  showQuantity?: boolean;
 };
 
 /**
@@ -34,6 +47,7 @@ export function ItemFormModal({
   initialName = '',
   initialPriceCents,
   initialQuantity = 1,
+  showQuantity = true,
 }: ItemFormModalProps) {
   const initialPriceText = initialPriceCents ? (initialPriceCents / 100).toFixed(2) : '';
   const initialQuantityText = String(initialQuantity);
@@ -85,7 +99,7 @@ export function ItemFormModal({
       </View>
 
       <View style={styles.priceRow}>
-        <View style={[styles.field, styles.priceField]}>
+        <View style={[styles.field, showQuantity ? styles.priceField : styles.priceFieldWide]}>
           <ThemedText type="label" style={styles.fieldLabel}>
             Price
           </ThemedText>
@@ -99,19 +113,21 @@ export function ItemFormModal({
           />
         </View>
 
-        <View style={[styles.field, styles.quantityField]}>
-          <ThemedText type="label" style={styles.fieldLabel}>
-            Qty
-          </ThemedText>
-          <TextField
-            value={quantity}
-            onChangeText={setQuantity}
-            placeholder="1"
-            keyboardType="number-pad"
-            returnKeyType="done"
-            onSubmitEditing={handleSubmit}
-          />
-        </View>
+        {showQuantity && (
+          <View style={[styles.field, styles.quantityField]}>
+            <ThemedText type="label" style={styles.fieldLabel}>
+              Qty
+            </ThemedText>
+            <TextField
+              value={quantity}
+              onChangeText={setQuantity}
+              placeholder="1"
+              keyboardType="number-pad"
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
+          </View>
+        )}
       </View>
 
       <View style={styles.actions}>
@@ -136,6 +152,9 @@ const styles = StyleSheet.create({
   },
   priceField: {
     flex: 2,
+  },
+  priceFieldWide: {
+    flex: 1,
   },
   quantityField: {
     flex: 1,

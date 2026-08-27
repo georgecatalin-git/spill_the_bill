@@ -518,6 +518,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
 
       <ItemFormModal
         visible={addVisible}
+        showQuantity={false}
         onSubmit={async (name, unitPriceCents, quantity) => {
           setAddVisible(false);
           await bill.addItem({ name, unitPriceCents, quantity });

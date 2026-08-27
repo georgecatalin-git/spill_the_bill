@@ -43,6 +43,15 @@ of quietly pretending to work. An earlier mock layer caused a real bug where
 the app chose invented data over the user's own; do not reintroduce that
 pattern.
 
+**Adding by hand asks for no quantity.** A round is three taps of "beer"
+rather than one line of three: faster while the order is happening, and each
+drink is then claimable on its own, with no "3 of 4 claimed" for anybody to
+work out. The split lands in exactly the same place. The field survives in the
+*edit* form, because the scanner does produce quantities — a line reading
+"3 Cola 7.50" comes back as three — and those must stay correctable. It also
+survives on the review screen, where somebody is checking a scan against the
+paper in their hand and the printed quantities matter.
+
 **Two kinds of receipt line**, and they behave differently:
 - `quantity > 1` — unit based. Units are counted out and cannot be
   over-claimed. "3 of 4 claimed."
@@ -875,6 +884,22 @@ and removed the same day, for a different reason: it could only be configured
 from inside the restaurant, which is a six-hundred-kilometre drive for a client
 in Arad. What remains is that a table can only name a restaurant the owner
 entered, and that every scan is attributed to one.
+
+## Decided, not built: the receipt reconciles against the running tab
+
+Items can be typed as they are ordered, so a table can keep its own tab through
+the meal rather than waiting for paper. That leaves one question, and it has an
+answer: **when the receipt arrives, it is compared against what was noted and
+the differences are shown.** Not replaced, not appended — reconciled.
+
+That is the interesting version and the hard one. It needs a way to match a
+typed "bere" against a printed "BERE URSUS 0.5", a screen that shows what is
+only on paper, what is only on the tab, and what disagrees on price, and a
+decision recorded for each. `confirmed_total_cents` already exists for the
+figure it settles on.
+
+Do not implement it as "the receipt wins" or "both lists are concatenated" —
+both were considered and are the reason the question was worth asking.
 
 ## Not built yet
 
