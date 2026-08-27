@@ -43,6 +43,21 @@ of quietly pretending to work. An earlier mock layer caused a real bug where
 the app chose invented data over the user's own; do not reintroduce that
 pattern.
 
+**An order can be added straight onto somebody.** The add form offers who it
+is for, and "Nobody yet" is the default — an unclaimed line is still the normal
+case and still what guests tick for themselves. Choosing a person creates the
+item and puts it on their share in one action, because a waiter taking an order
+does one thing: "a beer for George" split across adding a line and then
+assigning it is how the second half gets forgotten. It reloads once at the end,
+so the table never flickers through a state where the beer exists and belongs
+to nobody.
+
+It composes two things that already existed — `createBillItem` and
+`admin_set_participant_claim` — and adds no new rule. The guest can still
+change what was put on their share; `claim_item` and `remove_item_claim` are
+untouched, as they have been since the host was first allowed to record for
+others.
+
 **Adding by hand asks for no quantity.** A round is three taps of "beer"
 rather than one line of three: faster while the order is happening, and each
 drink is then claimable on its own, with no "3 of 4 claimed" for anybody to

@@ -519,9 +519,18 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
       <ItemFormModal
         visible={addVisible}
         showQuantity={false}
-        onSubmit={async (name, unitPriceCents, quantity) => {
+        people={bill.participants.map((person) => ({ id: person.id, name: person.name }))}
+        onSubmit={async (name, unitPriceCents, quantity, forPersonId) => {
           setAddVisible(false);
-          await bill.addItem({ name, unitPriceCents, quantity });
+
+          // One act, not two: a round ordered for George goes onto George.
+          // Left on "Nobody yet" it behaves exactly as before, which is what
+          // guests claiming for themselves still rely on.
+          if (forPersonId) {
+            await bill.addItemFor({ name, unitPriceCents, quantity }, forPersonId);
+          } else {
+            await bill.addItem({ name, unitPriceCents, quantity });
+          }
         }}
         onClose={() => setAddVisible(false)}
       />

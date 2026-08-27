@@ -1,17 +1,26 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import { parseQuantity } from '@/lib/bill';
 import { parsePriceToCents } from '@/lib/money';
 
+/** Somebody at the table an order can be put on. */
+export type ItemFormPerson = { id: string; name: string };
+
 type ItemFormModalProps = {
   visible: boolean;
-  onSubmit: (name: string, unitPriceCents: number, quantity: number) => void;
+  onSubmit: (
+    name: string,
+    unitPriceCents: number,
+    quantity: number,
+    forPersonId: string | null
+  ) => void;
   onClose: () => void;
   title?: string;
   submitLabel?: string;
@@ -31,6 +40,15 @@ type ItemFormModalProps = {
    * correctable.
    */
   showQuantity?: boolean;
+  /**
+   * Who the order can be put on, offered while adding.
+   *
+   * A waiter taking an order does one thing — "a beer for George" — and
+   * splitting that across adding the line and then assigning it is how the
+   * second half gets forgotten. Leave empty to keep the item unclaimed, which
+   * is still the default and still what guests do for themselves.
+   */
+  people?: ItemFormPerson[];
 };
 
 /**
@@ -48,13 +66,18 @@ export function ItemFormModal({
   initialPriceCents,
   initialQuantity = 1,
   showQuantity = true,
+  people = [],
 }: ItemFormModalProps) {
+  const border = useThemeColor({}, 'border');
+  const accent = useThemeColor({}, 'text');
+
   const initialPriceText = initialPriceCents ? (initialPriceCents / 100).toFixed(2) : '';
   const initialQuantityText = String(initialQuantity);
 
   const [name, setName] = useState(initialName);
   const [price, setPrice] = useState(initialPriceText);
   const [quantity, setQuantity] = useState(initialQuantityText);
+  const [forPersonId, setForPersonId] = useState<string | null>(null);
 
 
   const parsedPrice = parsePriceToCents(price);
@@ -65,11 +88,12 @@ export function ItemFormModal({
     setName(initialName);
     setPrice(initialPriceText);
     setQuantity(initialQuantityText);
+    setForPersonId(null);
   }
 
   function handleSubmit() {
     if (!canSubmit) return;
-    onSubmit(name, parsedPrice, parsedQuantity);
+    onSubmit(name, parsedPrice, parsedQuantity, forPersonId);
     reset();
   }
 
@@ -130,6 +154,44 @@ export function ItemFormModal({
         )}
       </View>
 
+      {people.length > 0 && (
+        <View style={styles.field}>
+          <ThemedText type="label" style={styles.fieldLabel}>
+            For
+          </ThemedText>
+
+          <View style={styles.people}>
+            {/* "Nobody yet" first and selected by default: an item that belongs
+                to no one is the normal case, and the one guests claim
+                themselves. */}
+            <Pressable
+              onPress={() => setForPersonId(null)}
+              style={[
+                styles.person,
+                { borderColor: border },
+                forPersonId === null && { borderColor: accent },
+              ]}>
+              <ThemedText type="secondary" style={styles.personLabel}>
+                Nobody yet
+              </ThemedText>
+            </Pressable>
+
+            {people.map((person) => (
+              <Pressable
+                key={person.id}
+                onPress={() => setForPersonId(person.id)}
+                style={[
+                  styles.person,
+                  { borderColor: border },
+                  forPersonId === person.id && { borderColor: accent },
+                ]}>
+                <ThemedText style={styles.personLabel}>{person.name}</ThemedText>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
       <View style={styles.actions}>
         <Button label={submitLabel} onPress={handleSubmit} disabled={!canSubmit} />
         <Button label="Cancel" variant="secondary" onPress={handleClose} />
@@ -152,6 +214,21 @@ const styles = StyleSheet.create({
   },
   priceField: {
     flex: 2,
+  },
+  people: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  person: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  personLabel: {
+    fontSize: 14,
+    lineHeight: 19,
   },
   priceFieldWide: {
     flex: 1,

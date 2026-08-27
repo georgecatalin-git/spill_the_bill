@@ -168,6 +168,37 @@ export function useAdminBill(tableId: string | undefined) {
     [mutate]
   );
 
+  /**
+   * Adds an item already on somebody's share.
+   *
+   * The two halves exist separately — `createBillItem` and the host's claim —
+   * but a waiter taking an order does one thing, not two: "a beer for
+   * George" is a single act, and splitting it across two screens is how the
+   * order gets written down and then forgotten.
+   *
+   * Reloads once at the end rather than after each half, so the table does not
+   * flicker through a state where the beer exists and belongs to nobody.
+   */
+  const addItemFor = useCallback(
+    async (input: BillItemInput, participantId: string) => {
+      if (!state.bill) return false;
+
+      try {
+        const item = await createBillItem(state.bill.id, input);
+        await assignItemTo(item.id, participantId, input.quantity);
+        await load();
+        return true;
+      } catch (error) {
+        setState((current) => ({
+          ...current,
+          error: error instanceof Error ? error.message : 'Something went wrong.',
+        }));
+        return false;
+      }
+    },
+    [state.bill, load]
+  );
+
   const editItem = useCallback(
     (itemId: string, input: BillItemInput) => mutate(() => updateBillItem(itemId, input)),
     [mutate]
@@ -278,6 +309,7 @@ export function useAdminBill(tableId: string | undefined) {
     myTipCents,
     reload: () => load(),
     addItem,
+    addItemFor,
     editItem,
     removeItem,
     saveTotals,
