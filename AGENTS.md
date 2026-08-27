@@ -83,6 +83,38 @@ single rows, because each of those has to stay claimable on its own; a row that
 already counts just counts higher — five beers turning out to be fifteen is one
 row reading fifteen, never a row of five beside a row of ten.
 
+**The bill is read by person first, items second.** The open bill leads with a
+card per participant — what they owe, and an **Add item** button beside their
+name — and keeps the item list underneath.
+
+A table orders in rounds, and the person who knows what they had is the person
+who had it. Beside a name, the interaction is the sentence somebody actually
+says: "Bogdan, three beers and a diavola". As a single list with a person
+picker, it was "add a line, now remember to assign it", which is how the second
+half gets forgotten. Nothing new is written to reach it — the card's Add is
+`addItemFor`, the same one action that already created the item and put it on
+somebody together.
+
+It works **from the draft onwards**, before `start_bill`, because that is when
+the ordering happens. `admin_set_participant_claim` only ever refused a
+COMPLETED bill, so nothing had to change for this.
+
+**Somebody who has ordered nothing still gets a card, at zero.** The totals are
+read from `item_claim_shares` through the claim details already loaded, not from
+`bill_participant_totals` — that view inner-joins the shares and drops a person
+with no claims entirely, and a person missing from the list is a person nobody
+remembers to collect from.
+
+**Paying zeroes somebody out, tip included.** One of five leaving early is the
+case this is for: `set_participant_settled` records it, the card then reads 0,
+and what they handed over stays on screen underneath, because "how much did Ana
+give you?" is asked long after the money changed hands. Their slice of the tip
+is inside that figure — the tip is split by headcount, so it is theirs whether
+they stay for it or not.
+
+The item list stays below the cards. The scanned receipt has to land somewhere,
+and a line nobody has claimed has nowhere else to be seen.
+
 **Two kinds of receipt line**, and they behave differently:
 - `quantity > 1` — unit based. Units are counted out and cannot be
   over-claimed. "3 of 4 claimed."

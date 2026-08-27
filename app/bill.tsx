@@ -10,6 +10,7 @@ import { EditableItemRow } from '@/components/bill/editable-item-row';
 import { EvenSplit } from '@/components/bill/even-split';
 import { ItemFormModal } from '@/components/bill/item-form-modal';
 import { MyTotal } from '@/components/bill/my-total';
+import { PersonCard } from '@/components/bill/person-card';
 import { ReceiptItemRow } from '@/components/bill/receipt-item-row';
 import { TipSplit } from '@/components/bill/tip-split';
 import { ThemedText } from '@/components/themed-text';
@@ -25,7 +26,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
 import { formatCents } from '@/lib/money';
 import type { BillItem as DbBillItem } from '@/lib/database';
-import type { BillItem } from '@/lib/types';
+import type { BillItem, Participant } from '@/lib/types';
 import { useGuest } from '@/providers/guest-provider';
 
 /** Maps a database row onto the shape the shared row components expect. */
@@ -242,6 +243,8 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const warning = useThemeColor({}, 'warning');
 
   const [addVisible, setAddVisible] = useState(false);
+  const [addingFor, setAddingFor] = useState<Participant | null>(null);
+  const [settling, setSettling] = useState<string | null>(null);
   const [totalsVisible, setTotalsVisible] = useState(false);
   const [editing, setEditing] = useState<DbBillItem | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -249,6 +252,20 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const currency = bill.bill?.currency ?? 'EUR';
   const draft = bill.bill?.status === 'DRAFT';
   const completed = bill.bill?.status === 'COMPLETED';
+
+  async function toggleSettled(person: Participant) {
+    setSettling(person.id);
+    try {
+      await bill.setSettled(person.id, person.settled !== true);
+    } catch (caught) {
+      Alert.alert(
+        'Could not record that',
+        caught instanceof Error ? caught.message : 'Please try again.'
+      );
+    } finally {
+      setSettling(null);
+    }
+  }
 
   async function assignTo(itemId: string, participantId: string) {
     try {
@@ -320,6 +337,39 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
             <ThemedText type="secondary" style={{ color: warning }}>
               {bill.error}
             </ThemedText>
+          )}
+
+          {/* People first, items underneath. A table orders in rounds, and the
+              person who knows what they had is the person who had it — so the
+              "Add" lives beside a name. The item list stays below because the
+              scanned receipt has to land somewhere, and a line nobody has
+              claimed has nowhere else to be seen. */}
+          {bill.participants.length > 0 && (
+            <View style={styles.section}>
+              <ThemedText type="label" style={styles.sectionLabel}>
+                At this table · {bill.participants.length}
+              </ThemedText>
+
+              <View style={styles.people}>
+                {bill.participants.map((person) => {
+                  const totals = bill.personTotals[person.id];
+                  return (
+                    <PersonCard
+                      key={person.id}
+                      person={person}
+                      isMe={person.id === bill.myParticipantId}
+                      totalCents={totals?.totalCents ?? 0}
+                      tipCents={totals?.tipCents ?? 0}
+                      currency={currency}
+                      canEdit={!completed}
+                      busy={settling === person.id}
+                      onAdd={() => setAddingFor(person)}
+                      onToggleSettled={() => toggleSettled(person)}
+                    />
+                  );
+                })}
+              </View>
+            </View>
           )}
 
           <View style={styles.section}>
@@ -534,6 +584,31 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
         onClose={() => setAddVisible(false)}
       />
 
+      {addingFor && (
+        <ItemFormModal
+          key={addingFor.id}
+          visible
+          title={`Add for ${addingFor.name}`}
+          onSubmit={async (name, unitPriceCents, quantity) => {
+            const person = addingFor;
+            setAddingFor(null);
+
+            try {
+              // One act, not two. The item is created and put on them together,
+              // so the table never flickers through a state where the beer
+              // exists and belongs to nobody.
+              await bill.addItemFor({ name, unitPriceCents, quantity }, person.id);
+            } catch (caught) {
+              Alert.alert(
+                'Could not add that',
+                caught instanceof Error ? caught.message : 'Please try again.'
+              );
+            }
+          }}
+          onClose={() => setAddingFor(null)}
+        />
+      )}
+
       {editing && (
         <ItemFormModal
           key={editing.id}
@@ -589,6 +664,9 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: Spacing.md,
+  },
+  people: {
+    gap: Spacing.sm,
   },
   sectionLabel: {
     opacity: 0.6,

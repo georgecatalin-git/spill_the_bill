@@ -5,6 +5,8 @@ export type Participant = {
   name: string;
   /** True for the person who created the table. */
   isAdmin?: boolean;
+  /** True once the admin has recorded that this person handed their money over. */
+  settled?: boolean;
 };
 
 export type TableStatus = 'active' | 'completed';

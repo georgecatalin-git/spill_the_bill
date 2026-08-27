@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import type {
@@ -22,7 +22,7 @@ import {
   getBillEvenShares,
   getBillTipShares,
 } from '@/lib/services/overview-service';
-import { listParticipants } from '@/lib/services/table-service';
+import { listParticipants, setParticipantSettled } from '@/lib/services/table-service';
 import type { ClaimMap, Participant } from '@/lib/types';
 import {
   createBillItem,
@@ -120,6 +120,7 @@ export function useAdminBill(tableId: string | undefined) {
           id: person.id ?? '',
           name: person.name ?? '',
           isAdmin: person.is_admin ?? false,
+          settled: Boolean(person.settled_at),
         })),
         myParticipantId: meId ?? '',
         tipShares,
@@ -274,6 +275,55 @@ export function useAdminBill(tableId: string | undefined) {
   const myTotalCents = splitEvenly ? myEvenShare : myItemsCents + myTipCents;
 
   /**
+   * What each person at the table owes, the same arithmetic the admin's own
+   * total uses, done for everybody.
+   *
+   * Read from `amounts`, which is `item_claim_shares` — the database's own
+   * largest-remainder answer — rather than recomputed here. Somebody who has
+   * claimed nothing is still in this map at zero: `bill_participant_totals`
+   * inner-joins the shares and drops them entirely, and a person missing from
+   * the list is a person nobody remembers to collect from.
+   */
+  const personTotals = useMemo(() => {
+    const totals: Record<string, { itemsCents: number; tipCents: number; totalCents: number }> = {};
+
+    for (const person of state.participants) {
+      // An even split already covers items, tax, service and tip, so it
+      // replaces this arithmetic rather than adding to it.
+      if (splitEvenly) {
+        const share =
+          state.evenShares.find((row) => row.participant_id === person.id)?.share_cents ?? 0;
+        totals[person.id] = { itemsCents: share, tipCents: 0, totalCents: share };
+        continue;
+      }
+
+      const itemsCents = state.items.reduce(
+        (sum, item) => sum + (state.amounts[item.id]?.[person.id] ?? 0),
+        0
+      );
+      const tipCents =
+        state.tipShares.find((row) => row.participant_id === person.id)?.tip_share_cents ?? 0;
+
+      totals[person.id] = { itemsCents, tipCents, totalCents: itemsCents + tipCents };
+    }
+
+    return totals;
+  }, [state.participants, state.items, state.amounts, state.tipShares, state.evenShares, splitEvenly]);
+
+  /**
+   * Records that somebody has paid, then reloads rather than flipping the row
+   * here — the database stays the one that says who has settled, and everyone
+   * else's screen hears about it on the same channel.
+   */
+  const setSettled = useCallback(
+    async (participantId: string, settled: boolean) => {
+      await setParticipantSettled(participantId, settled);
+      await load();
+    },
+    [load]
+  );
+
+  /**
    * Everyone still at the table shares what nobody claimed. The set is not a
    * choice in the UI on purpose: the case this exists for is "we have no idea",
    * and asking who was drinking re-opens the argument it is meant to end.
@@ -306,6 +356,8 @@ export function useAdminBill(tableId: string | undefined) {
     splitEvenly,
     splitRestOfItem,
     assignOne,
+    personTotals,
+    setSettled,
     myTipCents,
     reload: () => load(),
     addItem,
