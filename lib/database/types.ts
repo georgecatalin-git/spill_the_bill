@@ -1418,14 +1418,6 @@ export type Database = {
           table_status: string
         }[]
       }
-      venue_by_code: {
-        Args: { p_venue_code: string }
-        Returns: {
-          city: string
-          id: string
-          name: string
-        }[]
-      }
     }
     Enums: {
       split_mode: "BY_ITEM" | "EVENLY"

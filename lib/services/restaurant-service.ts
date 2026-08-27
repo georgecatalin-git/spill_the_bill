@@ -241,10 +241,18 @@ export async function deleteAdminAccount(adminId: string): Promise<void> {
  * somebody already holds.
  */
 export async function getVenueByCode(code: string): Promise<RestaurantMatch | null> {
-  const { data, error } = await supabase.rpc('venue_by_code', { p_venue_code: code });
+  // The same function `create_table_at_venue` asks. There used to be a second
+  // one answering the same question for the picker, and two definitions of
+  // "which restaurant is this code" is exactly how a picker and the thing that
+  // enforces it end up disagreeing.
+  const { data, error } = await supabase.rpc('resolve_venue_code', { p_code: code });
 
   if (error) throw toFriendlyError(error, 'Could not check that code.');
-  return data?.[0] ?? null;
+
+  const match = data?.[0];
+  return match
+    ? { id: match.restaurant_id, name: match.restaurant_name, city: match.city }
+    : null;
 }
 
 /**

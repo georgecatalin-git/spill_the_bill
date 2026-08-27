@@ -140,6 +140,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827140000_the_code_is_the_only_way_in` | the account-to-restaurant link goes; a table can only be opened with the printed code |
 | `20260827160000_accounts_are_not_guests` | a scanned-in customer is a session identity, not an account |
 | `20260827180000_a_restaurant_has_one_admin` | `restaurants.admin_user_id`, and a restaurant admin sees its splits |
+| `20260827200000_one_definition_of_which_restaurant` | `venue_by_code` dropped; the picker asks the same function the gate does |
 
 Regenerate types after any schema change:
 
