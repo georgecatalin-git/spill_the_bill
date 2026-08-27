@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -59,6 +59,21 @@ export default function NewTableScreen() {
   // by hand is different: they already know it, and hiding it would only hide
   // their own typos.
   const [typingCode, setTypingCode] = useState(!scannedCode);
+
+  // A second sticker scanned while this screen is already open changes the
+  // param without remounting, and a useState initialiser only ever runs once —
+  // which is how scanning Le Pressoir showed Italien, left over from the scan
+  // before it. The link is the instruction; the state follows it.
+  useEffect(() => {
+    if (!scannedCode) return;
+
+    setVenueCode(scannedCode.toUpperCase());
+    setCodeMode(true);
+    setTypingCode(false);
+    setChosen(null);
+    setRestaurantError(undefined);
+    setSubmitError(null);
+  }, [scannedCode]);
   const [chosen, setChosen] = useState<RestaurantMatch | null>(null);
   const [error, setError] = useState<string>();
   const [restaurantError, setRestaurantError] = useState<string>();
@@ -88,11 +103,15 @@ export default function NewTableScreen() {
   //
   // Otherwise the account decides: the owner searches, staff already have
   // their restaurant, and anybody else has nothing but a code.
-  const usesCode = codeMode || (!picks && !loadingMine && !mine);
+  // An account that belongs to a restaurant opens tables only there, whatever
+  // sticker it is shown: it is that restaurant's identity, not a person's.
+  // `create_table_at_venue` refuses it too — this only saves the round trip.
+  const boundToOwnRestaurant = !picks && Boolean(mine);
+  const usesCode = !boundToOwnRestaurant && (codeMode || (!picks && !loadingMine && !mine));
   const restaurant = usesCode ? venue : picks ? chosen : mine;
 
-  /** Only these two have somewhere else to go if they change their mind. */
-  const canLeaveCodeMode = picks || Boolean(mine);
+  /** Only the owner has somewhere else to go; staff never reach code mode. */
+  const canLeaveCodeMode = picks;
 
   function pick(match: RestaurantMatch) {
     setChosen(match);
@@ -263,11 +282,11 @@ export default function NewTableScreen() {
                     <ThemedText style={styles.fixedRestaurant}>
                       {mine?.name} · {mine?.city}
                     </ThemedText>
-                    <Pressable onPress={() => setCodeMode(true)}>
-                      <ThemedText type="secondary" style={styles.switch}>
-                        I have a table code
+                    {Boolean(scannedCode) && (
+                      <ThemedText type="secondary" style={styles.hint}>
+                        This account belongs to {mine?.name}, so it opens tables only there.
                       </ThemedText>
-                    </Pressable>
+                    )}
                   </>
                 )
               ) : (

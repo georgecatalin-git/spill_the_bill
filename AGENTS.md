@@ -133,6 +133,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827000000_an_account_belongs_to_a_restaurant` | the account *is* the restaurant's; a table cannot be opened anywhere else |
 | `20260827020000_accounts_can_be_deleted` | an account can be removed, and the restaurant keeps its tables |
 | `20260827040000_a_code_on_the_table_opens_a_table` | a customer opens a table with the code printed in the restaurant |
+| `20260827060000_a_linked_account_ignores_other_codes` | a restaurant's own account cannot be sent elsewhere by a code |
 
 Regenerate types after any schema change:
 
@@ -601,6 +602,12 @@ nothing else in the session inherits permission.
 
 A wrong code and a hidden restaurant deliberately give the same sentence.
 Telling them apart would tell a stranger whether they had guessed a real code.
+
+**An account that belongs to a restaurant ignores every other code.** It is
+that restaurant's identity, shared by its staff — not a person who might go out
+to dinner elsewhere — and letting Italien's account open a table at Le Pressoir
+would put one client's activity in another client's figures. The code exists
+for somebody who belongs nowhere. The owner is exempt, as everywhere else.
 
 **Still missing, and blocked on the same two things as everything else:** the
 QR itself. Printing a sticker means encoding a URL, and a phone without the app
