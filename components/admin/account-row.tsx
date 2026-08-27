@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/card';
-import { Dropdown, type DropdownOption } from '@/components/ui/dropdown';
 import { Spacing } from '@/constants/theme';
 import { useState } from 'react';
 
@@ -12,21 +11,19 @@ import type { AdminAccount } from '@/lib/database';
 
 type AccountRowProps = {
   account: AdminAccount;
-  /** Every restaurant, as somewhere this account could belong. */
-  options: DropdownOption[];
-  onLink: (restaurantId: string | null) => Promise<void>;
   onDelete: () => Promise<void>;
 };
 
 /**
- * One account, and where it opens tables.
+ * One account: who it is, and what it has done.
  *
- * The restaurant is not something the account chooses — it is a property of
- * the profile, written only from here, and the database refuses a table
- * anywhere else. So this dropdown is the whole of the control, and an account
- * left unlinked simply cannot open a table.
+ * Deliberately nothing about restaurants. An account is not linked to one any
+ * more — the printed code says which restaurant a session is at, and
+ * `prevent_unauthorised_table` makes that the only way in. Choosing a
+ * restaurant for somebody was a control that only ever restricted the people
+ * the owner trusted.
  */
-export function AccountRow({ account, options, onLink, onDelete }: AccountRowProps) {
+export function AccountRow({ account, onDelete }: AccountRowProps) {
   const warning = useThemeColor({}, 'warning');
   const textSecondary = useThemeColor({}, 'textSecondary');
 
@@ -69,9 +66,7 @@ export function AccountRow({ account, options, onLink, onDelete }: AccountRowPro
       account.tables_total > 0
         ? `The ${account.tables_total} ${
             account.tables_total === 1 ? 'table' : 'tables'
-          } opened by this account stay with ${
-            account.restaurant_name ?? 'the restaurant'
-          }, but nobody will be able to act on them again.`
+          } opened by this account stay with their restaurants, but nobody will be able to act on them again.`
         : 'This account has never opened a table, so nothing else changes.';
 
     const confirmed = await confirmAction({
@@ -93,19 +88,6 @@ export function AccountRow({ account, options, onLink, onDelete }: AccountRowPro
           {account.email}
         </ThemedText>
       </View>
-
-      {!account.restaurant_id && (
-        <ThemedText type="secondary" style={[styles.line, { color: warning }]}>
-          Not linked — this account cannot open a table
-        </ThemedText>
-      )}
-
-      <Dropdown
-        value={account.restaurant_id ?? ''}
-        options={options}
-        onChange={(id) => void run(() => onLink(id || null), 'Could not link the account.')}
-        placeholder="Link to a restaurant"
-      />
 
       {error && (
         <ThemedText type="secondary" style={[styles.line, { color: warning }]}>

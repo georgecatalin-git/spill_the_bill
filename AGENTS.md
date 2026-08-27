@@ -137,6 +137,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827080000_the_receipt_must_belong_to_the_session` | the fiscal code on the paper must be the session restaurant's |
 | `20260827100000_restaurants_have_a_lifecycle_and_tables` | PENDING → ACTIVE → SUSPENDED → INACTIVE, and one code per physical table |
 | `20260827120000_one_code_per_restaurant` | physical tables out; one permanent code per restaurant, the table is what the guests call it |
+| `20260827140000_the_code_is_the_only_way_in` | the account-to-restaurant link goes; a table can only be opened with the printed code |
 
 Regenerate types after any schema change:
 
@@ -538,124 +539,41 @@ restaurant in person anyway.
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
 
-## An account belongs to a restaurant
+## The printed code is the only way a table is opened
 
-The account is the restaurant's own — its staff sign in to it — so
-`profiles.restaurant_id` says where tables may be opened, and
-`prevent_table_at_another_restaurant` refuses an insert that names anywhere
-else. The owner is exempt: they demo wherever the meeting is.
+An account used to be linked to a restaurant — `profiles.restaurant_id`, set by
+the owner — and a table could only be opened where the account belonged. That
+was the right answer while there was nothing else to prove which restaurant you
+were at. Once every restaurant had a printed code, it stopped being one: the
+code is open to anybody holding it, so the link restricted **only the accounts
+the owner trusted** and left everyone else free. A control that binds the
+trusted and nobody else is worse than none.
 
-**This is the first real boundary this problem has had**, and the reason is
-worth keeping. Everything before it checked whether a *choice* was right — a
-curated list, an assignment table, a location perimeter, the fiscal code on the
-receipt — and every one of them could be argued with, because the client made
-the choice and then something tried to grade it. Here the client never makes
-the choice: the restaurant is read from the profile, server-side, and a value
-that is never sent cannot be lied about.
+So the link is gone, and with it `my_restaurant_id`,
+`owner_set_admin_restaurant`, the clause it added to the restaurants read
+policy, and the restaurant dropdown on the Accounts screen.
 
-Two consequences follow, and both are deliberate:
+**What replaced it is stricter, not looser.** The old trigger was load-bearing
+in a way that is easy to miss: the RLS policy on `tables` is
+`admin_id = auth.uid()`, so any signed-in caller could always INSERT a row
+naming any restaurant, and what stopped them was the trigger refusing unlinked
+accounts. `prevent_unauthorised_table` now refuses **every** insert that did
+not come through `create_table_at_venue`, which proved the restaurant from a
+printed code. The owner stays exempt, for demos.
 
-- **`restaurant_id` carries no UPDATE grant on `profiles`**, so an account
-  cannot move itself. `profiles` had INSERT/UPDATE revoked and the safe columns
-  granted back by name in `20260826000000`, which means a new column is
-  unwritable until it is named — here that default is the feature, and
-  `owner_set_admin_restaurant` is the only route.
-- **The restaurants SELECT policy gained `id = my_restaurant_id()`.** A newly
-  linked account has no tables yet, and without this clause it could not read
-  the name of its own restaurant — the New Table screen would show a blank
-  where the restaurant belongs.
+`create_table_at_venue` grants that permission through a transaction-local
+setting and **clears it immediately after the insert**. `is_local` means "until
+the end of the transaction", not "until the end of the statement" — PostgREST
+gives each request its own, so nothing could reach it from a phone, but a
+permission that outlives what it was granted for is what a later change trips
+over. The test that found this was inserting a second table in the same
+transaction.
 
-An unlinked account is not broken, it is **not yet a customer**: sign-up stays
-open so a prospect can make an account during a demo, and linking is what
-signing the contract does. Until then the account can sign in and see nothing
-it can act on.
-
-The New Table screen shows the restaurant as a fact, not a field. Three ways
-in, decided by the account: the owner searches, staff already have their
-restaurant, and anybody else is a customer holding the code printed on the
-table.
-
-## A code on the table opens a table
-
-Staff have the restaurant on their account. A customer sitting at the table has
-no such account and nothing tying them to a place — so the tie is a sticker.
-Each restaurant has one `venue_code`, printed on every table, and presenting it
-is what says "this is Italien". `create_table_at_venue` reads the restaurant off
-the code, server-side; the app never names one.
-
-**The code is not a login.** The customer is never signed in as the restaurant:
-they keep their own session and their own table, and the RLS that has always
-restricted `tables` to `admin_id = auth.uid()` is why they see theirs and
-nothing else. There is no screen to hide because there is nothing else to
-reach. Handing out the restaurant's account instead — which is how this was
-first described — would have handed out every table's totals, names and receipt
-photos with it.
-
-**It is rotatable, and that is why it is a column rather than the restaurant's
-id.** A sticker can be photographed. When a code turns up where it should not,
-`owner_rotate_venue_code` issues a new one and the stickers get reprinted; an id
-could never be changed. The Owner tab shows each code and offers **New code**
-behind a confirmation that says what it breaks.
-
-The insert still has to pass `prevent_table_at_another_restaurant`, which exists
-to stop an account naming somewhere it does not belong. A customer belongs
-nowhere, so `create_table_at_venue` sets a **transaction-local** setting the
-trigger reads — `is_local => true`, so it cannot outlive the statement and
-nothing else in the session inherits permission.
-
-A wrong code and a hidden restaurant deliberately give the same sentence.
-Telling them apart would tell a stranger whether they had guessed a real code.
-
-**The customer who scans has nothing.** No app until a minute ago, no account,
-and no wish to make one — so a scanned code opens a session for them on the
-spot, through Supabase anonymous sign-in. They become an ordinary `auth.uid()`
-with no email and no password, which is what keeps every path downstream
-unchanged: RLS sees a normal account, and they see their own table and nothing
-else. Asking them to sign up first would lose most of them at the one moment
-the app has to work.
-
-`handle_new_user` copes with the missing email already and settles for "there";
-the New Table screen asks the name and `setMyName` replaces it. `AuthUser.isGuest`
-is how the app knows to ask.
-
-**This needs Anonymous sign-ins enabled on the Supabase project** —
-Authentication → Sign In / Providers. Without it the API answers
-`anonymous_provider_disabled`, and the app says so rather than blaming the
-person holding the phone.
-
-**An account that belongs to a restaurant ignores every other code.** It is
-that restaurant's identity, shared by its staff — not a person who might go out
-to dinner elsewhere — and letting Italien's account open a table at Le Pressoir
-would put one client's activity in another client's figures. The code exists
-for somebody who belongs nowhere. The owner is exempt, as everywhere else.
-
-**Still missing, and blocked on the same two things as everything else:** the
-QR itself. Printing a sticker means encoding a URL, and a phone without the app
-can only be sent to the App Store by an https universal link — which needs a
-domain and a published app. Until then the code is typed, which is why it uses
-the unambiguous alphabet with no O/0 or I/1.
-
-**Deleting an account keeps the restaurant's history.** `tables.admin_id`
-cascaded from `profiles`, so a waiter who left and removed their account would
-have taken months of the restaurant's activity with them — every table, and
-with them the bills, the participants and the claims. That is the evidence the
-owner area exists to produce, and it belongs to the restaurant rather than to
-whoever was holding the phone. The link is `set null` instead: the tables stay,
-with no administrator, and nobody can act on them again — every policy on
-`tables` reads `admin_id = auth.uid()`, and null matches nobody, which is the
-right outcome rather than a gap.
-
-Two routes, both `SECURITY DEFINER` because deleting the `auth.users` row is
-what actually removes an account and no client role has business in the auth
-schema. `delete_my_account` is Profile → Delete Account; `owner_delete_admin`
-is the Owner tab. Each refuses an owner account, and the owner's refuses
-deleting itself — losing the one account that curates restaurants and links
-staff is not something the app should be able to do.
-
-Storage is deliberately untouched. Receipt photos live in a bucket, the tables
-survive here anyway, and this project has already learned that deleting storage
-objects from Postgres raises inside `storage.protect_delete` and takes the
-parent row down with it.
+**When a restaurant dashboard is built, it will need a membership relation** —
+account to restaurant, with a role — because there is currently nothing that
+scopes an admin to a restaurant's data. Nothing does today: `admin_table_summaries`
+shows an admin their *own* tables, never the restaurant's. Build it as
+membership set during onboarding, not as a picker somebody chooses from.
 
 ## A restaurant has a lifecycle, and tables
 

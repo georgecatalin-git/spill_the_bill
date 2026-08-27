@@ -17,7 +17,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import type { DropdownOption } from '@/components/ui/dropdown';
 import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
@@ -26,7 +25,6 @@ import {
   createRestaurant,
   deleteAdminAccount,
   rotateVenueCode,
-  setAdminRestaurant,
   deleteRestaurant,
   mergeRestaurants,
   setRestaurantStatus,
@@ -117,12 +115,6 @@ export default function OwnerScreen() {
   if (role !== 'owner') {
     return <Redirect href="/(admin)/dashboard" />;
   }
-
-  const restaurantOptions: DropdownOption[] = stats.map((stat) => ({
-    value: stat.restaurant_id,
-    label: stat.restaurant_name,
-    hint: stat.city,
-  }));
 
   const totals = stats.reduce(
     (sum, stat) => ({
@@ -272,16 +264,8 @@ export default function OwnerScreen() {
                   <AccountRow
                     key={account.admin_id}
                     account={account}
-                    options={restaurantOptions}
                     onDelete={() =>
                       runOn(account.admin_id, () => deleteAdminAccount(account.admin_id))
-                    }
-                    onLink={(restaurantId) =>
-                      // Keyed on the restaurant so the spinner lands on the card
-                      // being changed; unlinking has no card, hence the account.
-                      runOn(restaurantId ?? account.admin_id, () =>
-                        setAdminRestaurant(account.admin_id, restaurantId)
-                      )
                     }
                   />
                 ))

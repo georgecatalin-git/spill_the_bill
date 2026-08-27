@@ -323,7 +323,6 @@ export type Database = {
           full_name: string
           id: string
           onboarding_completed: boolean
-          restaurant_id: string | null
           role: string
           updated_at: string
         }
@@ -333,7 +332,6 @@ export type Database = {
           full_name: string
           id: string
           onboarding_completed?: boolean
-          restaurant_id?: string | null
           role?: string
           updated_at?: string
         }
@@ -343,19 +341,10 @@ export type Database = {
           full_name?: string
           id?: string
           onboarding_completed?: boolean
-          restaurant_id?: string | null
           role?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       receipt_scans: {
         Row: {
@@ -1171,7 +1160,6 @@ export type Database = {
           participant_id: string
         }[]
       }
-      my_restaurant_id: { Args: never; Returns: string }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
       normalise_tax_id: { Args: { p_value: string }; Returns: string }
       owner_delete_admin: { Args: { p_admin_id: string }; Returns: undefined }
@@ -1183,10 +1171,9 @@ export type Database = {
         Args: never
         Returns: {
           admin_id: string
+          created_at: string
           email: string
           full_name: string
-          restaurant_id: string
-          restaurant_name: string
           role: string
           tables_total: number
         }[]
@@ -1218,10 +1205,6 @@ export type Database = {
       owner_rotate_venue_code: {
         Args: { p_restaurant_id: string }
         Returns: string
-      }
-      owner_set_admin_restaurant: {
-        Args: { p_admin_id: string; p_restaurant_id: string }
-        Returns: undefined
       }
       owner_set_restaurant_status: {
         Args: { p_restaurant_id: string; p_status: string }

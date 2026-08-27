@@ -192,34 +192,10 @@ export async function getOwnerRestaurantStats(): Promise<OwnerRestaurantStat[]> 
 }
 
 /**
- * The restaurant this account belongs to, or null when nobody has linked it.
+ * Every account. Owner only.
  *
- * The id comes from the profile — the one value a client never sends — and the
- * name is read back through the policy that lets an account see its own
- * restaurant. A table opened anywhere else is refused by
- * `prevent_table_at_another_restaurant`, so this is what to show, not a picker.
- */
-export async function getMyRestaurant(): Promise<RestaurantMatch | null> {
-  const { data: mine, error: idError } = await supabase.rpc('my_restaurant_id');
-
-  if (idError) throw toFriendlyError(idError, 'Could not load your restaurant.');
-  if (!mine) return null;
-
-  const { data, error } = await supabase
-    .from('restaurants')
-    .select('id, name, city')
-    .eq('id', mine)
-    .maybeSingle();
-
-  if (error) throw toFriendlyError(error, 'Could not load your restaurant.');
-  return data;
-}
-
-/**
- * Every account and where it belongs.
- *
- * Owner only. `profiles` is restricted to `id = auth.uid()`, so there is no
- * query the owner could write that would see anybody else.
+ * `profiles` is restricted to `id = auth.uid()`, so there is no query the
+ * owner could write that would see anybody else — hence the definer function.
  */
 export async function listAdminAccounts(): Promise<AdminAccount[]> {
   const { data, error } = await supabase.rpc('owner_list_admins');
@@ -231,32 +207,6 @@ export async function listAdminAccounts(): Promise<AdminAccount[]> {
     throw toFriendlyError(error, 'Could not load the accounts.');
   }
   return data ?? [];
-}
-
-/**
- * Links an account to a restaurant, or unlinks it with null.
- *
- * The only route to `profiles.restaurant_id`: the column carries no UPDATE
- * grant, deliberately, so an admin cannot move themselves.
- */
-export async function setAdminRestaurant(
-  adminId: string,
-  restaurantId: string | null
-): Promise<void> {
-  const { error } = await supabase.rpc('owner_set_admin_restaurant', {
-    p_admin_id: adminId,
-    // The generator types every function argument as non-null, but a SQL
-    // parameter always accepts NULL and this one means "unlink". The cast is
-    // to the type generator, not to the database.
-    p_restaurant_id: restaurantId as string,
-  });
-
-  if (error) {
-    if (error.message.includes('Only the owner')) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not link the account.');
-  }
 }
 
 /**

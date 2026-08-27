@@ -24,7 +24,6 @@ import {
   ensureAdminParticipant,
 } from '@/lib/services/table-service';
 import { setMyName } from '@/lib/services/profile-service';
-import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { useRestaurantSearch } from '@/lib/services/use-restaurant-search';
 import { useVenueCode } from '@/lib/services/use-venue-code';
 import { isBlank } from '@/lib/validation';
@@ -120,7 +119,6 @@ export default function NewTableScreen() {
   const [pending, setPending] = useState(false);
 
   const { matches, searching, error: searchError, tooShort } = useRestaurantSearch(query);
-  const { restaurant: mine, loading: loadingMine, error: mineError } = useMyRestaurant(signedIn);
   const {
     venue,
     checking,
@@ -142,14 +140,14 @@ export default function NewTableScreen() {
   //
   // Otherwise the account decides: the owner searches, staff already have
   // their restaurant, and anybody else has nothing but a code.
-  // An account that belongs to a restaurant opens tables only there, whatever
-  // sticker it is shown: it is that restaurant's identity, not a person's.
-  // `create_table_at_venue` refuses it too — this only saves the round trip.
-  const boundToOwnRestaurant = !picks && Boolean(mine);
-  const usesCode = !boundToOwnRestaurant && (codeMode || (!picks && !loadingMine && !mine));
-  const restaurant = usesCode ? venue : picks ? chosen : mine;
+  // Two ways in, and the account decides which. The owner searches, because
+  // they demo wherever the meeting is. Everybody else presents the code
+  // printed in the restaurant — there is no third answer any more, and no
+  // account is tied to a restaurant.
+  const usesCode = codeMode || !picks;
+  const restaurant = usesCode ? venue : chosen;
 
-  /** Only the owner has somewhere else to go; staff never reach code mode. */
+  /** Only the owner has anywhere else to go. */
   const canLeaveCodeMode = picks;
 
   function pick(match: RestaurantMatch) {
@@ -313,34 +311,9 @@ export default function NewTableScreen() {
                           setRestaurantError(undefined);
                         }}>
                         <ThemedText type="secondary" style={styles.switch}>
-                          {picks
-                            ? 'Search for a restaurant instead'
-                            : 'Use my own restaurant instead'}
+                          Search for a restaurant instead
                         </ThemedText>
                       </Pressable>
-                    )}
-                  </>
-                )
-              ) : !picks ? (
-                loadingMine ? (
-                  <ThemedText type="secondary" style={styles.hint}>
-                    Loading…
-                  </ThemedText>
-                ) : (
-                  <>
-                    <ThemedText style={styles.fixedRestaurant}>
-                      {mine?.name} · {mine?.city}
-                    </ThemedText>
-                    {/* Named after the place they tried to reach, not after the
-                        one they are stuck at. "This account belongs to Italien"
-                        is true and useless; what they need is which door was
-                        shut and who opens it. */}
-                    {Boolean(scannedCode) && (
-                      <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                        {venue
-                          ? `This account is not assigned to ${venue.name}. Ask the owner to assign it, or open the table at ${mine?.name}.`
-                          : 'That code does not open a table here.'}
-                      </ThemedText>
                     )}
                   </>
                 )
@@ -402,9 +375,9 @@ export default function NewTableScreen() {
                 </>
               )}
 
-              {(venueError ?? mineError ?? searchError ?? restaurantError) && (
+              {(venueError ?? searchError ?? restaurantError) && (
                 <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                  {venueError ?? mineError ?? searchError ?? restaurantError}
+                  {venueError ?? searchError ?? restaurantError}
                 </ThemedText>
               )}
             </View>
