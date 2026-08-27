@@ -40,7 +40,11 @@ export default function NewTableScreen() {
   // A deep link lands here on a cold start, before the stored session has been
   // read back. Every query below needs it, and a 401 would be rendered as a
   // verdict about the code rather than about the timing.
+  //
+  // "Settled and nobody there" is its own answer and has to be said out loud:
+  // waiting for a session that is never coming is how this hung on Checking…
   const signedIn = !restoring && Boolean(user);
+  const signedOut = !restoring && !user;
   const warning = useThemeColor({}, 'warning');
   const border = useThemeColor({}, 'border');
 
@@ -48,6 +52,13 @@ export default function NewTableScreen() {
   const [query, setQuery] = useState('');
   const [venueCode, setVenueCode] = useState((scannedCode ?? '').toUpperCase());
   const [codeMode, setCodeMode] = useState(Boolean(scannedCode));
+
+  // A scanned code is never put on screen. The customer read it off a sticker
+  // and has no use for the characters — showing them is how a code walks out
+  // of the restaurant in somebody's notes and gets used from home. Typing one
+  // by hand is different: they already know it, and hiding it would only hide
+  // their own typos.
+  const [typingCode, setTypingCode] = useState(!scannedCode);
   const [chosen, setChosen] = useState<RestaurantMatch | null>(null);
   const [error, setError] = useState<string>();
   const [restaurantError, setRestaurantError] = useState<string>();
@@ -167,50 +178,81 @@ export default function NewTableScreen() {
               </ThemedText>
 
               {usesCode ? (
-                <>
-                  <FormField
-                    label=""
-                    value={venueCode}
-                    onChangeText={(text) => {
-                      setVenueCode(text.toUpperCase());
-                      setRestaurantError(undefined);
-                    }}
-                    placeholder="Code printed on your table"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                  />
-
-                  {venue ? (
-                    <ThemedText style={styles.fixedRestaurant}>
-                      {venue.name} · {venue.city}
-                    </ThemedText>
-                  ) : codeTooShort ? (
-                    <ThemedText type="secondary" style={styles.hint}>
-                      The code is on a sticker on your table.
-                    </ThemedText>
-                  ) : checking ? (
-                    <ThemedText type="secondary" style={styles.hint}>
-                      Checking…
-                    </ThemedText>
-                  ) : (
+                signedOut ? (
+                  <>
                     <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                      That code does not open a table here.
+                      Sign in to open a table.
                     </ThemedText>
-                  )}
-
-                  {canLeaveCodeMode && (
-                    <Pressable
-                      onPress={() => {
-                        setCodeMode(false);
-                        setVenueCode('');
-                        setRestaurantError(undefined);
-                      }}>
+                    <Pressable onPress={() => router.push('/login')}>
                       <ThemedText type="secondary" style={styles.switch}>
-                        {picks ? 'Search for a restaurant instead' : 'Use my own restaurant instead'}
+                        Log in
                       </ThemedText>
                     </Pressable>
-                  )}
-                </>
+                  </>
+                ) : (
+                  <>
+                    {typingCode && (
+                      <FormField
+                        label=""
+                        value={venueCode}
+                        onChangeText={(text) => {
+                          setVenueCode(text.toUpperCase());
+                          setRestaurantError(undefined);
+                        }}
+                        placeholder="Code printed on your table"
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                      />
+                    )}
+
+                    {venue ? (
+                      <ThemedText style={styles.fixedRestaurant}>
+                        {venue.name} · {venue.city}
+                      </ThemedText>
+                    ) : codeTooShort ? (
+                      <ThemedText type="secondary" style={styles.hint}>
+                        The code is on a sticker on your table.
+                      </ThemedText>
+                    ) : checking ? (
+                      <ThemedText type="secondary" style={styles.hint}>
+                        Checking…
+                      </ThemedText>
+                    ) : (
+                      <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
+                        That code does not open a table here.
+                      </ThemedText>
+                    )}
+
+                    {!typingCode && (
+                      <Pressable
+                        onPress={() => {
+                          setTypingCode(true);
+                          setVenueCode('');
+                          setRestaurantError(undefined);
+                        }}>
+                        <ThemedText type="secondary" style={styles.switch}>
+                          Enter a different code
+                        </ThemedText>
+                      </Pressable>
+                    )}
+
+                    {canLeaveCodeMode && (
+                      <Pressable
+                        onPress={() => {
+                          setCodeMode(false);
+                          setTypingCode(true);
+                          setVenueCode('');
+                          setRestaurantError(undefined);
+                        }}>
+                        <ThemedText type="secondary" style={styles.switch}>
+                          {picks
+                            ? 'Search for a restaurant instead'
+                            : 'Use my own restaurant instead'}
+                        </ThemedText>
+                      </Pressable>
+                    )}
+                  </>
+                )
               ) : !picks ? (
                 loadingMine ? (
                   <ThemedText type="secondary" style={styles.hint}>
