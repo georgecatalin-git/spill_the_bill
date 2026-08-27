@@ -99,6 +99,23 @@ It works **from the draft onwards**, before `start_bill`, because that is when
 the ordering happens. `admin_set_participant_claim` only ever refused a
 COMPLETED bill, so nothing had to change for this.
 
+**Each card lists what that person ordered, and every line has a "+".** A table
+orders the same things all evening, so the second beer costs one tap rather than
+a form.
+
+The "+" widens the line and *then* takes the new unit, in that order. Both
+halves matter. A claim on its own would only hand them a second **share** of the
+same drink — on a `quantity = 1` line, claims divide a price rather than count
+units — and the bill would not grow by the beer they just ordered. And doing it
+the other way round simply fails: raising a claim past the quantity is refused
+with "Only 2 of 2 units of "bere" are still available", verified against the
+live database.
+
+It is offered only where widening cannot change what anybody else owes: on a
+counted line always, and on a shareable one only when this person is its sole
+claimant. A shared platter gets no "+", because turning it into a counted line
+would rewrite the other claimants' shares without asking them.
+
 **Somebody who has ordered nothing still gets a card, at zero.** The totals are
 read from `item_claim_shares` through the claim details already loaded, not from
 `bill_participant_totals` — that view inner-joins the shares and drops a person

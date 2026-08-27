@@ -19,7 +19,20 @@ import type { Participant } from '@/lib/types';
  *
  * Somebody who has ordered nothing still gets a card, at zero. A person missing
  * from the list is a person nobody remembers to collect from.
+ *
+ * What they have ordered is listed underneath, each line with a "+": a table
+ * orders the same things again all evening, and the second beer should cost one
+ * tap rather than a form.
  */
+
+/** One item on somebody's card: what it is, how many of it is theirs. */
+export type PersonLine = {
+  itemId: string;
+  name: string;
+  shares: number;
+  amountCents: number;
+  canAddMore: boolean;
+};
 
 type PersonCardProps = {
   person: Participant;
@@ -28,11 +41,16 @@ type PersonCardProps = {
   totalCents: number;
   /** The tip part of it, shown so the figure can be checked rather than trusted. */
   tipCents: number;
+  /** What they have ordered so far. Empty on an evenly split bill. */
+  lines: PersonLine[];
   currency?: string;
   /** False once the bill is closed — a settled bill is a record, not a form. */
   canEdit: boolean;
   busy?: boolean;
+  /** Which line is mid-write, so its "+" can stop taking taps. */
+  addingTo?: string | null;
   onAdd: () => void;
+  onAddOneMore: (itemId: string) => void;
   onToggleSettled: () => void;
 };
 
@@ -41,10 +59,13 @@ export function PersonCard({
   isMe,
   totalCents,
   tipCents,
+  lines,
   currency,
   canEdit,
   busy,
+  addingTo,
   onAdd,
+  onAddOneMore,
   onToggleSettled,
 }: PersonCardProps) {
   const border = useThemeColor({}, 'border');
@@ -84,6 +105,45 @@ export function PersonCard({
           {formatCents(settled ? 0 : totalCents, currency)}
         </ThemedText>
       </View>
+
+      {lines.length > 0 && (
+        <View style={[styles.lines, { borderTopColor: border }]}>
+          {lines.map((line) => (
+            <View key={line.itemId} style={styles.line}>
+              <ThemedText style={styles.lineName} numberOfLines={1}>
+                {line.shares > 1 ? `${line.shares} × ` : ''}
+                {line.name}
+              </ThemedText>
+
+              <ThemedText type="secondary" style={styles.lineAmount}>
+                {formatCents(line.amountCents, currency)}
+              </ThemedText>
+
+              {/* One tap for the next round. Offered only where widening the
+                  line cannot change what anybody else owes. */}
+              {canEdit && line.canAddMore && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`One more ${line.name} for ${person.name}`}
+                  disabled={addingTo === line.itemId}
+                  onPress={() => onAddOneMore(line.itemId)}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.plus,
+                    { borderColor: border },
+                    pressed && styles.pressed,
+                  ]}>
+                  {addingTo === line.itemId ? (
+                    <ActivityIndicator size="small" color={textSecondary} />
+                  ) : (
+                    <ThemedText style={styles.plusGlyph}>+</ThemedText>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
 
       {canEdit && (
         <View style={styles.actions}>
@@ -157,6 +217,40 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
     fontVariant: ['tabular-nums'],
+  },
+  lines: {
+    borderTopWidth: 1,
+    paddingTop: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  line: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    minHeight: 30,
+  },
+  lineName: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  lineAmount: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontVariant: ['tabular-nums'],
+  },
+  plus: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusGlyph: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '600',
   },
   actions: {
     flexDirection: 'row',

@@ -293,7 +293,30 @@ export function useAdminBill(tableId: string | undefined) {
    * the list is a person nobody remembers to collect from.
    */
   const personTotals = useMemo(() => {
-    const totals: Record<string, { itemsCents: number; tipCents: number; totalCents: number }> = {};
+    const totals: Record<
+      string,
+      {
+        itemsCents: number;
+        tipCents: number;
+        totalCents: number;
+        lines: {
+          itemId: string;
+          name: string;
+          /** How many of it is on this person. */
+          shares: number;
+          amountCents: number;
+          /**
+           * Whether one more can be added by tapping.
+           *
+           * A counted line always can: widening it by one and taking that unit
+           * leaves everybody else's share exactly as it was. A shareable line
+           * can only when this person is its sole claimant, because widening it
+           * turns it into a counted one and would rewrite what the others owe.
+           */
+          canAddMore: boolean;
+        }[];
+      }
+    > = {};
 
     for (const person of state.participants) {
       // An even split already covers items, tax, service and tip, so it
@@ -301,22 +324,75 @@ export function useAdminBill(tableId: string | undefined) {
       if (splitEvenly) {
         const share =
           state.evenShares.find((row) => row.participant_id === person.id)?.share_cents ?? 0;
-        totals[person.id] = { itemsCents: share, tipCents: 0, totalCents: share };
+        // An even split ignores claims, so listing them under a name would be
+        // showing somebody a breakdown that is not what they are being charged.
+        totals[person.id] = { itemsCents: share, tipCents: 0, totalCents: share, lines: [] };
         continue;
       }
 
-      const itemsCents = state.items.reduce(
-        (sum, item) => sum + (state.amounts[item.id]?.[person.id] ?? 0),
-        0
-      );
+      const lines = state.items
+        .map((item) => {
+          const shares = state.claims[item.id]?.[person.id] ?? 0;
+          const claimedByAll = Object.values(state.claims[item.id] ?? {}).reduce(
+            (sum, count) => sum + count,
+            0
+          );
+
+          return {
+            itemId: item.id,
+            name: item.name,
+            shares,
+            amountCents: state.amounts[item.id]?.[person.id] ?? 0,
+            canAddMore: item.quantity > 1 || claimedByAll === shares,
+          };
+        })
+        .filter((line) => line.shares > 0);
+
+      const itemsCents = lines.reduce((sum, line) => sum + line.amountCents, 0);
       const tipCents =
         state.tipShares.find((row) => row.participant_id === person.id)?.tip_share_cents ?? 0;
 
-      totals[person.id] = { itemsCents, tipCents, totalCents: itemsCents + tipCents };
+      totals[person.id] = { itemsCents, tipCents, totalCents: itemsCents + tipCents, lines };
     }
 
     return totals;
-  }, [state.participants, state.items, state.amounts, state.tipShares, state.evenShares, splitEvenly]);
+  }, [
+    state.participants,
+    state.items,
+    state.claims,
+    state.amounts,
+    state.tipShares,
+    state.evenShares,
+    splitEvenly,
+  ]);
+
+  /**
+   * One more of an item, on that person — the "+" beside a line on their card.
+   *
+   * Two writes, and the order is the whole thing. The line is widened first and
+   * the new unit taken second: raising a claim past the quantity is refused, so
+   * doing it the other way round fails on every counted line. Widening also has
+   * to happen at all — a claim on its own would only hand them a second *share*
+   * of the same drink, and the bill would not grow by the beer they just
+   * ordered.
+   */
+  const addOneMore = useCallback(
+    async (billItemId: string, participantId: string) => {
+      const item = state.items.find((row) => row.id === billItemId);
+      if (!item) return;
+
+      const held = state.claims[billItemId]?.[participantId] ?? 0;
+
+      await updateBillItem(billItemId, {
+        name: item.name,
+        quantity: item.quantity + 1,
+        unitPriceCents: item.unit_price_cents,
+      });
+      await assignItemTo(billItemId, participantId, held + 1);
+      await load();
+    },
+    [state.items, state.claims, load]
+  );
 
   /**
    * Records that somebody has paid, then reloads rather than flipping the row
@@ -365,6 +441,7 @@ export function useAdminBill(tableId: string | undefined) {
     splitRestOfItem,
     assignOne,
     personTotals,
+    addOneMore,
     setSettled,
     myTipCents,
     reload: () => load(),

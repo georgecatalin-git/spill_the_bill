@@ -245,6 +245,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const [addVisible, setAddVisible] = useState(false);
   const [addingFor, setAddingFor] = useState<Participant | null>(null);
   const [settling, setSettling] = useState<string | null>(null);
+  const [addingTo, setAddingTo] = useState<string | null>(null);
   const [totalsVisible, setTotalsVisible] = useState(false);
   const [editing, setEditing] = useState<DbBillItem | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -252,6 +253,20 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const currency = bill.bill?.currency ?? 'EUR';
   const draft = bill.bill?.status === 'DRAFT';
   const completed = bill.bill?.status === 'COMPLETED';
+
+  async function addOneMore(itemId: string, participantId: string) {
+    setAddingTo(itemId);
+    try {
+      await bill.addOneMore(itemId, participantId);
+    } catch (caught) {
+      Alert.alert(
+        'Could not add another',
+        caught instanceof Error ? caught.message : 'Please try again.'
+      );
+    } finally {
+      setAddingTo(null);
+    }
+  }
 
   async function toggleSettled(person: Participant) {
     setSettling(person.id);
@@ -360,10 +375,13 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                       isMe={person.id === bill.myParticipantId}
                       totalCents={totals?.totalCents ?? 0}
                       tipCents={totals?.tipCents ?? 0}
+                      lines={totals?.lines ?? []}
                       currency={currency}
                       canEdit={!completed}
                       busy={settling === person.id}
+                      addingTo={addingTo}
                       onAdd={() => setAddingFor(person)}
+                      onAddOneMore={(itemId) => addOneMore(itemId, person.id)}
                       onToggleSettled={() => toggleSettled(person)}
                     />
                   );
