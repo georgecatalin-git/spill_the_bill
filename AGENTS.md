@@ -132,6 +132,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826480000_the_scanner_just_scans` | the whole receipt check comes back out; the scanner reads and nothing else |
 | `20260827000000_an_account_belongs_to_a_restaurant` | the account *is* the restaurant's; a table cannot be opened anywhere else |
 | `20260827020000_accounts_can_be_deleted` | an account can be removed, and the restaurant keeps its tables |
+| `20260827040000_a_code_on_the_table_opens_a_table` | a customer opens a table with the code printed in the restaurant |
 
 Regenerate types after any schema change:
 
@@ -565,8 +566,47 @@ open so a prospect can make an account during a demo, and linking is what
 signing the contract does. Until then the account can sign in and see nothing
 it can act on.
 
-The New Table screen shows the restaurant as a fact, not a field. Only the
-owner still gets the search box.
+The New Table screen shows the restaurant as a fact, not a field. Three ways
+in, decided by the account: the owner searches, staff already have their
+restaurant, and anybody else is a customer holding the code printed on the
+table.
+
+## A code on the table opens a table
+
+Staff have the restaurant on their account. A customer sitting at the table has
+no such account and nothing tying them to a place — so the tie is a sticker.
+Each restaurant has one `venue_code`, printed on every table, and presenting it
+is what says "this is Italien". `create_table_at_venue` reads the restaurant off
+the code, server-side; the app never names one.
+
+**The code is not a login.** The customer is never signed in as the restaurant:
+they keep their own session and their own table, and the RLS that has always
+restricted `tables` to `admin_id = auth.uid()` is why they see theirs and
+nothing else. There is no screen to hide because there is nothing else to
+reach. Handing out the restaurant's account instead — which is how this was
+first described — would have handed out every table's totals, names and receipt
+photos with it.
+
+**It is rotatable, and that is why it is a column rather than the restaurant's
+id.** A sticker can be photographed. When a code turns up where it should not,
+`owner_rotate_venue_code` issues a new one and the stickers get reprinted; an id
+could never be changed. The Owner tab shows each code and offers **New code**
+behind a confirmation that says what it breaks.
+
+The insert still has to pass `prevent_table_at_another_restaurant`, which exists
+to stop an account naming somewhere it does not belong. A customer belongs
+nowhere, so `create_table_at_venue` sets a **transaction-local** setting the
+trigger reads — `is_local => true`, so it cannot outlive the statement and
+nothing else in the session inherits permission.
+
+A wrong code and a hidden restaurant deliberately give the same sentence.
+Telling them apart would tell a stranger whether they had guessed a real code.
+
+**Still missing, and blocked on the same two things as everything else:** the
+QR itself. Printing a sticker means encoding a URL, and a phone without the app
+can only be sent to the App Store by an https universal link — which needs a
+domain and a published app. Until then the code is typed, which is why it uses
+the unambiguous alphabet with no O/0 or I/1.
 
 **Deleting an account keeps the restaurant's history.** `tables.admin_id`
 cascaded from `profiles`, so a waiter who left and removed their account would

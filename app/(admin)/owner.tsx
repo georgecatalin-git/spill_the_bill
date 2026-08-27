@@ -25,6 +25,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import {
   createRestaurant,
   deleteAdminAccount,
+  rotateVenueCode,
   setAdminRestaurant,
   deleteRestaurant,
   mergeRestaurants,
@@ -223,6 +224,11 @@ export default function OwnerScreen() {
                   }
                   onDelete={() =>
                     runOn(stat.restaurant_id, () => deleteRestaurant(stat.restaurant_id))
+                  }
+                  onRotateCode={() =>
+                    runOn(stat.restaurant_id, async () => {
+                      await rotateVenueCode(stat.restaurant_id);
+                    })
                   }
                 />
               ))}

@@ -18,9 +18,14 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { RestaurantMatch } from '@/lib/database';
-import { createTable, ensureAdminParticipant } from '@/lib/services/table-service';
+import {
+  createTable,
+  createTableAtVenue,
+  ensureAdminParticipant,
+} from '@/lib/services/table-service';
 import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { useRestaurantSearch } from '@/lib/services/use-restaurant-search';
+import { useVenueCode } from '@/lib/services/use-venue-code';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -31,6 +36,7 @@ export default function NewTableScreen() {
 
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
+  const [venueCode, setVenueCode] = useState('');
   const [chosen, setChosen] = useState<RestaurantMatch | null>(null);
   const [error, setError] = useState<string>();
   const [restaurantError, setRestaurantError] = useState<string>();
@@ -39,13 +45,19 @@ export default function NewTableScreen() {
 
   const { matches, searching, error: searchError, tooShort } = useRestaurantSearch(query);
   const { restaurant: mine, loading: loadingMine, error: mineError } = useMyRestaurant();
+  const { venue, checking, error: venueError, tooShort: codeTooShort } = useVenueCode(venueCode);
 
   // The account's own restaurant is not a choice, so it is not offered as one.
   // Only the owner picks, because they demo wherever the meeting happens; the
   // database enforces the same split in
   // `prevent_table_at_another_restaurant`.
   const picks = role === 'owner';
-  const restaurant = picks ? chosen : mine;
+
+  // Three ways in, and the account decides which. The owner searches, staff
+  // have their restaurant already, and anybody else is a customer holding the
+  // code printed on the table in front of them.
+  const usesCode = !picks && !loadingMine && !mine;
+  const restaurant = picks ? chosen : usesCode ? venue : mine;
 
   function pick(match: RestaurantMatch) {
     setChosen(match);
@@ -64,7 +76,7 @@ export default function NewTableScreen() {
       setRestaurantError(
         picks
           ? 'Type the restaurant you are in and pick it from the list.'
-          : 'This account is not linked to a restaurant yet. Ask the owner to link it.'
+          : 'Enter the code printed on your table.'
       );
       return;
     }
@@ -73,7 +85,12 @@ export default function NewTableScreen() {
     setSubmitError(null);
     setPending(true);
     try {
-      const table = await createTable(name, restaurant.id);
+      // A customer names no restaurant: the server reads it off the code, so
+      // there is nothing the app could get wrong or the client could invent.
+      const table = usesCode
+        ? await createTableAtVenue(venueCode.trim(), name)
+        : await createTable(name, restaurant.id);
+
       await ensureAdminParticipant(table.id, hostName);
 
       router.replace({
@@ -135,9 +152,37 @@ export default function NewTableScreen() {
                     {mine.name} · {mine.city}
                   </ThemedText>
                 ) : (
-                  <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                    This account is not linked to a restaurant yet. Ask the owner to link it.
-                  </ThemedText>
+                  <>
+                    <FormField
+                      label=""
+                      value={venueCode}
+                      onChangeText={(text) => {
+                        setVenueCode(text.toUpperCase());
+                        setRestaurantError(undefined);
+                      }}
+                      placeholder="Code printed on your table"
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                    />
+
+                    {venue ? (
+                      <ThemedText style={styles.fixedRestaurant}>
+                        {venue.name} · {venue.city}
+                      </ThemedText>
+                    ) : codeTooShort ? (
+                      <ThemedText type="secondary" style={styles.hint}>
+                        The code is on a sticker on your table.
+                      </ThemedText>
+                    ) : checking ? (
+                      <ThemedText type="secondary" style={styles.hint}>
+                        Checking…
+                      </ThemedText>
+                    ) : (
+                      <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
+                        That code does not open a table here.
+                      </ThemedText>
+                    )}
+                  </>
                 )
               ) : (
                 <>
@@ -191,9 +236,9 @@ export default function NewTableScreen() {
                 </>
               )}
 
-              {(restaurantError ?? mineError ?? searchError) && (
+              {(restaurantError ?? mineError ?? searchError ?? venueError) && (
                 <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                  {restaurantError ?? mineError ?? searchError}
+                  {restaurantError ?? mineError ?? searchError ?? venueError}
                 </ThemedText>
               )}
             </View>

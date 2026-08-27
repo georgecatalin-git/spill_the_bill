@@ -243,3 +243,38 @@ export async function deleteAdminAccount(adminId: string): Promise<void> {
     throw toFriendlyError(error, 'Could not delete the account.');
   }
 }
+
+/**
+ * The restaurant a scanned or typed code belongs to.
+ *
+ * `restaurants` is not readable by a customer, so the app cannot name the place
+ * without asking the server. This answers only that, and only for a code
+ * somebody already holds.
+ */
+export async function getVenueByCode(code: string): Promise<RestaurantMatch | null> {
+  const { data, error } = await supabase.rpc('venue_by_code', { p_venue_code: code });
+
+  if (error) throw toFriendlyError(error, 'Could not check that code.');
+  return data?.[0] ?? null;
+}
+
+/**
+ * Issues a new code for a restaurant. Owner only.
+ *
+ * Every sticker already printed stops working, which is the whole point: a
+ * code that turned up somewhere it should not can be retired, and the id it
+ * would otherwise have been could never change.
+ */
+export async function rotateVenueCode(restaurantId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('owner_rotate_venue_code', {
+    p_restaurant_id: restaurantId,
+  });
+
+  if (error) {
+    if (error.message.includes('Only the owner') || error.message.includes('no longer exists')) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not issue a new code.');
+  }
+  return data as string;
+}

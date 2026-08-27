@@ -172,3 +172,41 @@ export async function ensureAdminParticipant(tableId: string, name: string) {
     throw toFriendlyError(error, 'Could not add you to the table.');
   }
 }
+
+/**
+ * Opens a table using the code printed on the restaurant's tables.
+ *
+ * For a customer, who belongs to no restaurant and cannot name one. The code
+ * is what says where they are — something they had to be sitting in front of —
+ * and the server reads it rather than trusting a restaurant id from the app.
+ *
+ * They stay themselves throughout: their own session, their own table. The RLS
+ * that has always restricted `tables` to `admin_id = auth.uid()` is why they
+ * see their own and nothing else.
+ */
+export async function createTableAtVenue(
+  venueCode: string,
+  name: string
+): Promise<{ id: string; name: string; invite_code: string; restaurant_name: string }> {
+  const { data, error } = await supabase.rpc('create_table_at_venue', {
+    p_venue_code: venueCode,
+    p_name: name,
+  });
+
+  if (error) {
+    // The server writes these for a person to read: a wrong code and a hidden
+    // restaurant deliberately give the same sentence.
+    if (
+      error.message.includes('does not open a table') ||
+      error.message.includes('Please sign in') ||
+      error.message.includes('Please name')
+    ) {
+      throw new TableServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not open the table. Please try again.');
+  }
+
+  const row = data?.[0];
+  if (!row) throw new TableServiceError('Could not open the table. Please try again.');
+  return row;
+}

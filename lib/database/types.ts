@@ -421,6 +421,7 @@ export type Database = {
           is_active: boolean
           name: string
           updated_at: string
+          venue_code: string
         }
         Insert: {
           city: string
@@ -429,6 +430,7 @@ export type Database = {
           is_active?: boolean
           name: string
           updated_at?: string
+          venue_code?: string
         }
         Update: {
           city?: string
@@ -437,6 +439,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           updated_at?: string
+          venue_code?: string
         }
         Relationships: []
       }
@@ -947,9 +950,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_table_at_venue: {
+        Args: { p_name: string; p_venue_code: string }
+        Returns: {
+          id: string
+          invite_code: string
+          name: string
+          restaurant_name: string
+        }[]
+      }
       delete_my_account: { Args: never; Returns: undefined }
       generate_invite_code: { Args: { p_length?: number }; Returns: string }
       generate_session_token: { Args: never; Returns: string }
+      generate_venue_code: { Args: never; Returns: string }
       get_admin_participant_id: {
         Args: { p_table_id: string }
         Returns: string
@@ -1157,7 +1170,12 @@ export type Database = {
           scans_this_month: number
           tables_active: number
           tables_total: number
+          venue_code: string
         }[]
+      }
+      owner_rotate_venue_code: {
+        Args: { p_restaurant_id: string }
+        Returns: string
       }
       owner_set_admin_restaurant: {
         Args: { p_admin_id: string; p_restaurant_id: string }
@@ -1331,6 +1349,14 @@ export type Database = {
           participant_id: string
           table_id: string
           table_status: string
+        }[]
+      }
+      venue_by_code: {
+        Args: { p_venue_code: string }
+        Returns: {
+          city: string
+          id: string
+          name: string
         }[]
       }
     }

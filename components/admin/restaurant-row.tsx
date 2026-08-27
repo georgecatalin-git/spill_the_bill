@@ -47,6 +47,8 @@ type RestaurantRowProps = {
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  /** Issues a new code, retiring every sticker already printed. */
+  onRotateCode: () => Promise<void>;
 };
 
 /**
@@ -64,6 +66,7 @@ export function RestaurantRow({
   onToggleActive,
   onMerge,
   onDelete,
+  onRotateCode,
 }: RestaurantRowProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const success = useThemeColor({}, 'success');
@@ -135,6 +138,26 @@ export function RestaurantRow({
       await onDelete();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not delete the restaurant.');
+    }
+  }
+
+  async function confirmRotate() {
+    // Worth a confirmation, because the damage is physical: every sticker in
+    // the restaurant stops working the moment this returns.
+    const confirmed = await confirmAction({
+      title: 'Issue a new code?',
+      message: `Every sticker already printed for ${stat.restaurant_name} stops working, and the tables have to be re-labelled. Do this when a code has turned up somewhere it should not.`,
+      confirmLabel: 'New code',
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
+    setError(null);
+    try {
+      await onRotateCode();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not issue a new code.');
     }
   }
 
@@ -245,6 +268,9 @@ export function RestaurantRow({
         <ThemedText type="secondary" style={styles.figure}>
           {lastActive(stat.last_activity_at)}
         </ThemedText>
+        <ThemedText type="secondary" style={styles.figure}>
+          Table code <ThemedText style={styles.code}>{stat.venue_code}</ThemedText>
+        </ThemedText>
         <ThemedText
           type="secondary"
           style={[styles.figure, overBudget && { color: warning }]}>
@@ -283,6 +309,12 @@ export function RestaurantRow({
           <Pressable onPress={startEditing} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
               Edit
+            </ThemedText>
+          </Pressable>
+
+          <Pressable onPress={() => void confirmRotate()} disabled={busy}>
+            <ThemedText type="secondary" style={styles.link}>
+              New code
             </ThemedText>
           </Pressable>
 
@@ -338,6 +370,11 @@ const styles = StyleSheet.create({
   },
   figure: {
     fontSize: 13,
+  },
+  code: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1,
   },
   actions: {
     flexDirection: 'row',
