@@ -591,6 +591,18 @@ card, which is why there is no "link account to restaurant" anywhere. Only the
 owner may write it, and `owner_set_restaurant_admin` refuses a guest session
 identity outright — an anonymous profile can never administer anything.
 
+**A restaurant admin can also act on them.** Reading a restaurant's splits
+without being able to touch them turned out to be worse than not seeing them:
+the screens offer every action, and each one came back 403 — add an item,
+add somebody to the table, all refused, with nothing on screen to explain it.
+The restaurant owns the split, and its admin is the waiter helping the table,
+which is the same person the host-records-orders flow was written for.
+
+That is widened in `is_table_admin`, `is_bill_admin` and `is_bill_item_admin`
+rather than across a dozen policies. Those three already mean "may act on
+this", and every write path asks one of them, so widening them once keeps the
+answer in one place. Each still derives the restaurant from the row.
+
 **A restaurant admin sees their restaurant's splits.** That took widening three
 read policies, not one: `admin_table_summaries` is `security_invoker`, so
 without `bills` and `participants` the sessions would have listed with every
