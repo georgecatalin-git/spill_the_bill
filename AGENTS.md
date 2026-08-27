@@ -138,6 +138,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827100000_restaurants_have_a_lifecycle_and_tables` | PENDING → ACTIVE → SUSPENDED → INACTIVE, and one code per physical table |
 | `20260827120000_one_code_per_restaurant` | physical tables out; one permanent code per restaurant, the table is what the guests call it |
 | `20260827140000_the_code_is_the_only_way_in` | the account-to-restaurant link goes; a table can only be opened with the printed code |
+| `20260827160000_accounts_are_not_guests` | a scanned-in customer is a session identity, not an account |
 
 Regenerate types after any schema change:
 

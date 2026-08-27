@@ -284,10 +284,11 @@ export function RestaurantRow({
 
       <View style={styles.figures}>
         <ThemedText type="secondary" style={styles.figure}>
-          {stat.tables_total} tables · {stat.tables_active} open
+          {stat.tables_active} active {stat.tables_active === 1 ? 'split' : 'splits'} ·{' '}
+          {stat.tables_total} in total
         </ThemedText>
         <ThemedText type="secondary" style={styles.figure}>
-          {stat.bills_completed} bills closed · {stat.participants_total} people
+          {stat.bills_completed} bills closed · {stat.participants_total} guests
         </ThemedText>
         <ThemedText type="secondary" style={styles.figure}>
           {lastActive(stat.last_activity_at)}

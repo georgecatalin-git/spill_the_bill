@@ -1175,7 +1175,7 @@ export type Database = {
           email: string
           full_name: string
           role: string
-          tables_total: number
+          sessions_opened: number
         }[]
       }
       owner_merge_restaurants: {

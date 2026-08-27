@@ -15,7 +15,11 @@ type AccountRowProps = {
 };
 
 /**
- * One account: who it is, and what it has done.
+ * One account: who it is.
+ *
+ * Only people who actually signed up reach this list. A customer who scanned a
+ * code has a Supabase user and a profile too, but they are a session identity
+ * rather than an account, and `owner_list_admins` leaves them out.
  *
  * Deliberately nothing about restaurants. An account is not linked to one any
  * more — the printed code says which restaurant a session is at, and
@@ -63,9 +67,9 @@ export function AccountRow({ account, onDelete }: AccountRowProps) {
     // this destroys is one login; what it deliberately does not destroy is the
     // restaurant's record, and that is the part somebody would worry about.
     const kept =
-      account.tables_total > 0
-        ? `The ${account.tables_total} ${
-            account.tables_total === 1 ? 'table' : 'tables'
+      account.sessions_opened > 0
+        ? `The ${account.sessions_opened} ${
+            account.sessions_opened === 1 ? 'split' : 'splits'
           } opened by this account stay with their restaurants, but nobody will be able to act on them again.`
         : 'This account has never opened a table, so nothing else changes.';
 
@@ -97,7 +101,7 @@ export function AccountRow({ account, onDelete }: AccountRowProps) {
 
       <View style={styles.actions}>
         <ThemedText type="secondary" style={styles.line}>
-          {account.tables_total} {account.tables_total === 1 ? 'table' : 'tables'} opened
+          {account.role === 'owner' ? 'Platform owner' : 'Account'}
         </ThemedText>
 
         <Pressable onPress={() => void confirmDelete()}>
