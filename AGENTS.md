@@ -603,6 +603,23 @@ nothing else in the session inherits permission.
 A wrong code and a hidden restaurant deliberately give the same sentence.
 Telling them apart would tell a stranger whether they had guessed a real code.
 
+**The customer who scans has nothing.** No app until a minute ago, no account,
+and no wish to make one — so a scanned code opens a session for them on the
+spot, through Supabase anonymous sign-in. They become an ordinary `auth.uid()`
+with no email and no password, which is what keeps every path downstream
+unchanged: RLS sees a normal account, and they see their own table and nothing
+else. Asking them to sign up first would lose most of them at the one moment
+the app has to work.
+
+`handle_new_user` copes with the missing email already and settles for "there";
+the New Table screen asks the name and `setMyName` replaces it. `AuthUser.isGuest`
+is how the app knows to ask.
+
+**This needs Anonymous sign-ins enabled on the Supabase project** —
+Authentication → Sign In / Providers. Without it the API answers
+`anonymous_provider_disabled`, and the app says so rather than blaming the
+person holding the phone.
+
 **An account that belongs to a restaurant ignores every other code.** It is
 that restaurant's identity, shared by its staff — not a person who might go out
 to dinner elsewhere — and letting Italien's account open a table at Le Pressoir

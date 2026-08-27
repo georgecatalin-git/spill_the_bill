@@ -18,7 +18,12 @@ function toAuthUser(user: User): AuthUser {
     user.email?.split('@')[0] ||
     'there';
 
-  return { id: user.id, name, email: user.email ?? '' };
+  return {
+    id: user.id,
+    name,
+    email: user.email ?? '',
+    isGuest: Boolean((user as { is_anonymous?: boolean }).is_anonymous),
+  };
 }
 
 export async function signUpAdmin(name: string, email: string, password: string) {
@@ -92,6 +97,45 @@ export async function resetAdminPassword(email: string) {
   }
 }
 
+/**
+ * A session for somebody who has nothing: no app until a minute ago, no
+ * account, no intention of making one.
+ *
+ * This is the customer who sat down, scanned the sticker on the table and
+ * wants to split a bill. Asking them to sign up first would lose most of them
+ * at the one moment the app has to work, so they get a real Supabase user with
+ * no email and no password instead. Everything downstream is unchanged: RLS
+ * sees an ordinary `auth.uid()`, and they see their own table and nothing else.
+ *
+ * `full_name` starts as whatever `handle_new_user` could infer — "there" — and
+ * is replaced the moment they type a name.
+ *
+ * Requires Anonymous sign-ins to be enabled on the Supabase project; without
+ * it the API refuses with `anonymous_provider_disabled`, and the message says
+ * so rather than blaming the person.
+ */
+export async function signInAnonymously(): Promise<AuthUser> {
+  try {
+    const { data, error } = await supabase.auth.signInAnonymously();
+
+    if (error) throw error;
+    if (!data.user) {
+      throw new AuthError('Could not start a session. Please try again.');
+    }
+
+    return toAuthUser(data.user);
+  } catch (caught) {
+    const code = (caught as { code?: string })?.code;
+
+    if (code === 'anonymous_provider_disabled') {
+      throw new AuthError(
+        'Guest sessions are switched off on this server. Enable anonymous sign-ins in Supabase.'
+      );
+    }
+    throw toAuthError(caught);
+  }
+}
+
 /** Keeps the app in step with sign-ins, sign-outs and token refreshes. */
 export function onAdminAuthStateChange(listener: (user: AuthUser | null) => void) {
   const { data } = supabase.auth.onAuthStateChange((_event, session: Session | null) => {
@@ -105,6 +149,7 @@ export const supabaseAuthService: AuthService = {
   signIn: signInAdmin,
   signUp: signUpAdmin,
   signOut: signOutAdmin,
+  signInAnonymously,
   getCurrentUser: getCurrentAdmin,
   resetPassword: resetAdminPassword,
   onAuthStateChange: onAdminAuthStateChange,

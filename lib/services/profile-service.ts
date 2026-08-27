@@ -62,3 +62,30 @@ export async function deleteMyAccount(): Promise<void> {
     throw toFriendlyError(error, 'Could not delete your account.');
   }
 }
+
+/**
+ * Records the name somebody typed for themselves.
+ *
+ * For the customer who arrived through a scanned code: `handle_new_user` had
+ * no email to infer a name from and settled for "there", which is nobody. The
+ * first time they name themselves, that is who they are.
+ *
+ * `full_name` is one of the two columns `authenticated` may write on its own
+ * profile — the rest were revoked so an account cannot promote itself or move
+ * to another restaurant.
+ */
+export async function setMyName(name: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const id = userData.user?.id;
+
+  if (!id) return;
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ full_name: name.trim() })
+    .eq('id', id);
+
+  // Not worth failing a table over: the name shows on the participant row
+  // either way, and this only keeps the profile in step.
+  if (error) console.warn('Could not save the name on the profile:', error.message);
+}

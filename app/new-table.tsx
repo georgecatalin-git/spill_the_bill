@@ -23,6 +23,7 @@ import {
   createTableAtVenue,
   ensureAdminParticipant,
 } from '@/lib/services/table-service';
+import { setMyName } from '@/lib/services/profile-service';
 import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { useRestaurantSearch } from '@/lib/services/use-restaurant-search';
 import { useVenueCode } from '@/lib/services/use-venue-code';
@@ -35,7 +36,7 @@ export default function NewTableScreen() {
   // and nothing else. Typing the code by hand reaches the same field.
   const { venue: scannedCode } = useLocalSearchParams<{ venue?: string }>();
 
-  const { user, role, restoring } = useAuth();
+  const { user, role, restoring, startGuestSession } = useAuth();
 
   // A deep link lands here on a cold start, before the stored session has been
   // read back. Every query below needs it, and a 401 would be rendered as a
@@ -44,7 +45,7 @@ export default function NewTableScreen() {
   // "Settled and nobody there" is its own answer and has to be said out loud:
   // waiting for a session that is never coming is how this hung on Checking…
   const signedIn = !restoring && Boolean(user);
-  const signedOut = !restoring && !user;
+  const needsName = Boolean(user?.isGuest);
   const warning = useThemeColor({}, 'warning');
   const border = useThemeColor({}, 'border');
 
@@ -59,11 +60,44 @@ export default function NewTableScreen() {
   // by hand is different: they already know it, and hiding it would only hide
   // their own typos.
   const [typingCode, setTypingCode] = useState(!scannedCode);
+  const [hostName, setHostName] = useState('');
+  const [hostNameError, setHostNameError] = useState<string>();
+  const [starting, setStarting] = useState(false);
+
+  // Only somebody who arrived without a code should ever be asked to log in; a
+  // scanned code opens its own session, so "nobody here" is a passing state.
+  const signedOut = !restoring && !user && !scannedCode && !starting;
 
   // A second sticker scanned while this screen is already open changes the
   // param without remounting, and a useState initialiser only ever runs once —
   // which is how scanning Le Pressoir showed Italien, left over from the scan
   // before it. The link is the instruction; the state follows it.
+  // The customer who has just sat down has no app, no account and no wish to
+  // make one. A scanned sticker opens a session for them on the spot — a real
+  // auth user with no email and no password — so the code they presented can
+  // be acted on instead of turned into a login screen.
+  useEffect(() => {
+    if (!scannedCode || restoring || user || starting) return;
+
+    let cancelled = false;
+    setStarting(true);
+
+    startGuestSession()
+      .catch((caught) => {
+        if (cancelled) return;
+        setSubmitError(
+          caught instanceof Error ? caught.message : 'Could not start a session.'
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setStarting(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scannedCode, restoring, user, starting, startGuestSession]);
+
   useEffect(() => {
     if (!scannedCode) return;
 
@@ -126,6 +160,11 @@ export default function NewTableScreen() {
       return;
     }
 
+    if (needsName && isBlank(hostName)) {
+      setHostNameError('Please tell us your name.');
+      return;
+    }
+
     if (!restaurant) {
       setRestaurantError(
         usesCode
@@ -135,7 +174,7 @@ export default function NewTableScreen() {
       return;
     }
 
-    const hostName = user?.name ?? 'The host';
+    const host = needsName ? hostName.trim() : (user?.name ?? 'The host');
     setSubmitError(null);
     setPending(true);
     try {
@@ -145,7 +184,11 @@ export default function NewTableScreen() {
         ? await createTableAtVenue(venueCode.trim(), name)
         : await createTable(name, restaurant.id);
 
-      await ensureAdminParticipant(table.id, hostName);
+      await ensureAdminParticipant(table.id, host);
+
+      // The profile was created with whatever could be inferred from an
+      // account that has no email — "there". Now there is a real answer.
+      if (needsName) await setMyName(host);
 
       router.replace({
         pathname: '/table',
@@ -177,6 +220,20 @@ export default function NewTableScreen() {
               title="New Table"
               subtitle="Name your table and pick where you are."
             />
+
+            {needsName && (
+              <FormField
+                label="Your name"
+                value={hostName}
+                onChangeText={(text) => {
+                  setHostName(text);
+                  setHostNameError(undefined);
+                }}
+                placeholder="Ana"
+                autoCapitalize="words"
+                error={hostNameError}
+              />
+            )}
 
             <FormField
               label="Table name"

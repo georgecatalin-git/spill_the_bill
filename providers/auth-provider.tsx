@@ -22,6 +22,8 @@ type AuthContextValue = {
   role: ProfileRole;
   /** True while the stored session is being restored on launch. */
   restoring: boolean;
+  /** Opens a session for somebody with no account. Used by the scanned-code path. */
+  startGuestSession: () => Promise<AuthUser>;
   pending: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<boolean>;
@@ -145,6 +147,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Opens a session for somebody who has no account, so a scanned table code
+   * can be acted on immediately.
+   *
+   * Deliberately not routed through `run`: there is no form waiting on it and
+   * no button to disable, and a failure here is reported by the screen that
+   * asked rather than as a login error.
+   */
+  const startGuestSession = useCallback(async () => {
+    const next = await authService.signInAnonymously();
+    setUser(next);
+    return next;
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo(
@@ -157,10 +173,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
+      startGuestSession,
       resetPassword,
       clearError,
     }),
-    [user, role, restoring, pending, error, signIn, signUp, signOut, resetPassword, clearError]
+    [
+      user,
+      role,
+      restoring,
+      pending,
+      error,
+      signIn,
+      signUp,
+      signOut,
+      startGuestSession,
+      resetPassword,
+      clearError,
+    ]
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;
