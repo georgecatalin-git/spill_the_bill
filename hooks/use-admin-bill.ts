@@ -116,12 +116,20 @@ export function useAdminBill(tableId: string | undefined) {
         error: silent ? current.error : null,
         blocker,
         ...shapeClaims(details),
-        participants: people.map((person) => ({
-          id: person.id ?? '',
-          name: person.name ?? '',
-          isAdmin: person.is_admin ?? false,
-          settled: Boolean(person.settled_at),
-        })),
+        // Only the people still here. `table_participants` does not filter
+        // `is_active`, and somebody who left is refused by
+        // `admin_set_participant_claim` and excluded from `bill_tip_shares` —
+        // so a card for them would offer an Add button that always fails and a
+        // total with no tip in it. It is also what "shared between everyone
+        // still at the table" has always meant for splitting the rest.
+        participants: people
+          .filter((person) => person.is_active !== false)
+          .map((person) => ({
+            id: person.id ?? '',
+            name: person.name ?? '',
+            isAdmin: person.is_admin ?? false,
+            settled: Boolean(person.settled_at),
+          })),
         myParticipantId: meId ?? '',
         tipShares,
         evenShares,
