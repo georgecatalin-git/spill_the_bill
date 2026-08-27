@@ -130,6 +130,7 @@ Migrations are the source of truth and are applied in order:
 | `20260826440000_search_by_name_and_demand_the_code` | perimeter out; the picker becomes a search box and the fiscal code becomes required |
 | `20260826460000_a_restaurant_without_a_code_cannot_scan` | the missing-code refusal moves before the API call |
 | `20260826480000_the_scanner_just_scans` | the whole receipt check comes back out; the scanner reads and nothing else |
+| `20260827000000_an_account_belongs_to_a_restaurant` | the account *is* the restaurant's; a table cannot be opened anywhere else |
 
 Regenerate types after any schema change:
 
@@ -524,6 +525,41 @@ restaurant in person anyway.
 `restaurant_name` still appears in the output of `admin_table_summaries` and
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
+
+## An account belongs to a restaurant
+
+The account is the restaurant's own — its staff sign in to it — so
+`profiles.restaurant_id` says where tables may be opened, and
+`prevent_table_at_another_restaurant` refuses an insert that names anywhere
+else. The owner is exempt: they demo wherever the meeting is.
+
+**This is the first real boundary this problem has had**, and the reason is
+worth keeping. Everything before it checked whether a *choice* was right — a
+curated list, an assignment table, a location perimeter, the fiscal code on the
+receipt — and every one of them could be argued with, because the client made
+the choice and then something tried to grade it. Here the client never makes
+the choice: the restaurant is read from the profile, server-side, and a value
+that is never sent cannot be lied about.
+
+Two consequences follow, and both are deliberate:
+
+- **`restaurant_id` carries no UPDATE grant on `profiles`**, so an account
+  cannot move itself. `profiles` had INSERT/UPDATE revoked and the safe columns
+  granted back by name in `20260826000000`, which means a new column is
+  unwritable until it is named — here that default is the feature, and
+  `owner_set_admin_restaurant` is the only route.
+- **The restaurants SELECT policy gained `id = my_restaurant_id()`.** A newly
+  linked account has no tables yet, and without this clause it could not read
+  the name of its own restaurant — the New Table screen would show a blank
+  where the restaurant belongs.
+
+An unlinked account is not broken, it is **not yet a customer**: sign-up stays
+open so a prospect can make an account during a demo, and linking is what
+signing the contract does. Until then the account can sign in and see nothing
+it can act on.
+
+The New Table screen shows the restaurant as a fact, not a field. Only the
+owner still gets the search box.
 
 ## Typed, not listed — and no scan without the code
 

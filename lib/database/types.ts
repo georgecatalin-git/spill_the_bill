@@ -311,6 +311,7 @@ export type Database = {
           full_name: string
           id: string
           onboarding_completed: boolean
+          restaurant_id: string | null
           role: string
           updated_at: string
         }
@@ -320,6 +321,7 @@ export type Database = {
           full_name: string
           id: string
           onboarding_completed?: boolean
+          restaurant_id?: string | null
           role?: string
           updated_at?: string
         }
@@ -329,10 +331,19 @@ export type Database = {
           full_name?: string
           id?: string
           onboarding_completed?: boolean
+          restaurant_id?: string | null
           role?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       receipt_scans: {
         Row: {
@@ -1108,10 +1119,22 @@ export type Database = {
           participant_id: string
         }[]
       }
+      my_restaurant_id: { Args: never; Returns: string }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string }
         Returns: undefined
+      }
+      owner_list_admins: {
+        Args: never
+        Returns: {
+          admin_id: string
+          email: string
+          full_name: string
+          restaurant_id: string
+          restaurant_name: string
+          role: string
+        }[]
       }
       owner_merge_restaurants: {
         Args: { p_source: string; p_target: string }
@@ -1132,6 +1155,10 @@ export type Database = {
           tables_active: number
           tables_total: number
         }[]
+      }
+      owner_set_admin_restaurant: {
+        Args: { p_admin_id: string; p_restaurant_id: string }
+        Returns: undefined
       }
       owns_receipt_object: { Args: { p_object_name: string }; Returns: boolean }
       record_receipt_scan: {

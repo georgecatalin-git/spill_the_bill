@@ -11,22 +11,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountRow } from '@/components/admin/account-row';
 import { RestaurantRow } from '@/components/admin/restaurant-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import type { DropdownOption } from '@/components/ui/dropdown';
 import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import {
   createRestaurant,
+  setAdminRestaurant,
   deleteRestaurant,
   mergeRestaurants,
   setRestaurantActive,
   updateRestaurant,
 } from '@/lib/services/restaurant-service';
+import { useAdminAccounts } from '@/lib/services/use-admin-accounts';
 import { useOwnerStats } from '@/lib/services/use-owner-stats';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
@@ -34,6 +38,7 @@ import { useAuth } from '@/providers/auth-provider';
 export default function OwnerScreen() {
   const { role } = useAuth();
   const { stats, loading, error, reload } = useOwnerStats();
+  const { accounts, error: accountsError, reload: reloadAccounts } = useAdminAccounts();
   const warning = useThemeColor({}, 'warning');
   // The keyboard covers the tab bar as well as the fields, so the avoiding
   // view has to be told how much of the bottom is already spoken for.
@@ -79,12 +84,12 @@ export default function OwnerScreen() {
       setBusyId(restaurantId);
       try {
         await action();
-        await reload();
+        await Promise.all([reload(), reloadAccounts()]);
       } finally {
         setBusyId(null);
       }
     },
-    [reload]
+    [reload, reloadAccounts]
   );
 
   // Hiding the tab is a convenience; this is the screen refusing to render for
@@ -92,6 +97,12 @@ export default function OwnerScreen() {
   if (role !== 'owner') {
     return <Redirect href="/(admin)/dashboard" />;
   }
+
+  const restaurantOptions: DropdownOption[] = stats.map((stat) => ({
+    value: stat.restaurant_id,
+    label: stat.restaurant_name,
+    hint: stat.city,
+  }));
 
   const totals = stats.reduce(
     (sum, stat) => ({
@@ -171,9 +182,9 @@ export default function OwnerScreen() {
               </ThemedText>
             </Card>
 
-            {error && (
+            {(error ?? accountsError) && (
               <ThemedText type="secondary" style={{ color: warning }}>
-                {error}
+                {error ?? accountsError}
               </ThemedText>
             )}
 
@@ -214,6 +225,33 @@ export default function OwnerScreen() {
                   }
                 />
               ))}
+            </View>
+
+            <View style={styles.section}>
+              <ThemedText type="label" style={styles.sectionLabel}>
+                Accounts
+              </ThemedText>
+
+              {accounts.length === 0 ? (
+                <Card>
+                  <ThemedText type="secondary">No accounts yet.</ThemedText>
+                </Card>
+              ) : (
+                accounts.map((account) => (
+                  <AccountRow
+                    key={account.admin_id}
+                    account={account}
+                    options={restaurantOptions}
+                    onLink={(restaurantId) =>
+                      // Keyed on the restaurant so the spinner lands on the card
+                      // being changed; unlinking has no card, hence the account.
+                      runOn(restaurantId ?? account.admin_id, () =>
+                        setAdminRestaurant(account.admin_id, restaurantId)
+                      )
+                    }
+                  />
+                ))
+              )}
             </View>
 
             <View style={styles.section}>

@@ -19,12 +19,13 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { RestaurantMatch } from '@/lib/database';
 import { createTable, ensureAdminParticipant } from '@/lib/services/table-service';
+import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { useRestaurantSearch } from '@/lib/services/use-restaurant-search';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function NewTableScreen() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const warning = useThemeColor({}, 'warning');
   const border = useThemeColor({}, 'border');
 
@@ -37,6 +38,14 @@ export default function NewTableScreen() {
   const [pending, setPending] = useState(false);
 
   const { matches, searching, error: searchError, tooShort } = useRestaurantSearch(query);
+  const { restaurant: mine, loading: loadingMine, error: mineError } = useMyRestaurant();
+
+  // The account's own restaurant is not a choice, so it is not offered as one.
+  // Only the owner picks, because they demo wherever the meeting happens; the
+  // database enforces the same split in
+  // `prevent_table_at_another_restaurant`.
+  const picks = role === 'owner';
+  const restaurant = picks ? chosen : mine;
 
   function pick(match: RestaurantMatch) {
     setChosen(match);
@@ -51,8 +60,12 @@ export default function NewTableScreen() {
       return;
     }
 
-    if (!chosen) {
-      setRestaurantError('Type the restaurant you are in and pick it from the list.');
+    if (!restaurant) {
+      setRestaurantError(
+        picks
+          ? 'Type the restaurant you are in and pick it from the list.'
+          : 'This account is not linked to a restaurant yet. Ask the owner to link it.'
+      );
       return;
     }
 
@@ -60,7 +73,7 @@ export default function NewTableScreen() {
     setSubmitError(null);
     setPending(true);
     try {
-      const table = await createTable(name, chosen.id);
+      const table = await createTable(name, restaurant.id);
       await ensureAdminParticipant(table.id, hostName);
 
       router.replace({
@@ -69,7 +82,7 @@ export default function NewTableScreen() {
           id: table.id,
           code: table.invite_code,
           name: table.name,
-          restaurant: chosen.name,
+          restaurant: restaurant.name,
         },
       });
     } catch (caught) {
@@ -112,59 +125,75 @@ export default function NewTableScreen() {
                 Restaurant
               </ThemedText>
 
-              {/* Typed rather than chosen from a list. Spelling is free — case,
-                  diacritics and "SRL" are all folded server-side — but the name
-                  has to be right, and a place the owner has not entered is
-                  simply not found. */}
-              <FormField
-                label=""
-                value={query}
-                onChangeText={(text) => {
-                  setQuery(text);
-                  setChosen(null);
-                  setRestaurantError(undefined);
-                }}
-                placeholder="Type where you are"
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-
-              {chosen ? (
-                <ThemedText type="secondary" style={styles.hint}>
-                  {chosen.name} · {chosen.city}
-                </ThemedText>
-              ) : tooShort ? (
-                <ThemedText type="secondary" style={styles.hint}>
-                  Type at least three letters of the restaurant&apos;s name.
-                </ThemedText>
-              ) : searching ? (
-                <ThemedText type="secondary" style={styles.hint}>
-                  Searching…
-                </ThemedText>
-              ) : matches.length === 0 ? (
-                <ThemedText type="secondary" style={styles.hint}>
-                  Nothing found. Check the spelling — and if this place is not on
-                  Split yet, the owner has to add it first.
-                </ThemedText>
+              {!picks ? (
+                loadingMine ? (
+                  <ThemedText type="secondary" style={styles.hint}>
+                    Loading…
+                  </ThemedText>
+                ) : mine ? (
+                  <ThemedText style={styles.fixedRestaurant}>
+                    {mine.name} · {mine.city}
+                  </ThemedText>
+                ) : (
+                  <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
+                    This account is not linked to a restaurant yet. Ask the owner to link it.
+                  </ThemedText>
+                )
               ) : (
-                <View style={[styles.matches, { borderColor: border }]}>
-                  {matches.map((match) => (
-                    <Pressable
-                      key={match.id}
-                      onPress={() => pick(match)}
-                      style={[styles.match, { borderColor: border }]}>
-                      <ThemedText style={styles.matchName}>{match.name}</ThemedText>
-                      <ThemedText type="secondary" style={styles.hint}>
-                        {match.city}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
+                <>
+                  {/* The owner alone still chooses, and types rather than picks
+                      from a list: the customer list is not readable in one
+                      piece any more. */}
+                  <FormField
+                    label=""
+                    value={query}
+                    onChangeText={(text) => {
+                      setQuery(text);
+                      setChosen(null);
+                      setRestaurantError(undefined);
+                    }}
+                    placeholder="Type where you are"
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+
+                  {chosen ? (
+                    <ThemedText type="secondary" style={styles.hint}>
+                      {chosen.name} · {chosen.city}
+                    </ThemedText>
+                  ) : tooShort ? (
+                    <ThemedText type="secondary" style={styles.hint}>
+                      Type at least three letters of the restaurant&apos;s name.
+                    </ThemedText>
+                  ) : searching ? (
+                    <ThemedText type="secondary" style={styles.hint}>
+                      Searching…
+                    </ThemedText>
+                  ) : matches.length === 0 ? (
+                    <ThemedText type="secondary" style={styles.hint}>
+                      Nothing found. Check the spelling.
+                    </ThemedText>
+                  ) : (
+                    <View style={[styles.matches, { borderColor: border }]}>
+                      {matches.map((match) => (
+                        <Pressable
+                          key={match.id}
+                          onPress={() => pick(match)}
+                          style={[styles.match, { borderColor: border }]}>
+                          <ThemedText style={styles.matchName}>{match.name}</ThemedText>
+                          <ThemedText type="secondary" style={styles.hint}>
+                            {match.city}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
 
-              {(restaurantError ?? searchError) && (
+              {(restaurantError ?? mineError ?? searchError) && (
                 <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                  {restaurantError ?? searchError}
+                  {restaurantError ?? mineError ?? searchError}
                 </ThemedText>
               )}
             </View>
@@ -202,6 +231,11 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: Spacing.sm,
+  },
+  fixedRestaurant: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '600',
   },
   matches: {
     borderWidth: StyleSheet.hairlineWidth,

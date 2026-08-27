@@ -19,6 +19,10 @@ export type Restaurant = Tables<'restaurants'>;
  */
 export type RestaurantMatch =
   Database['public']['Functions']['search_restaurants']['Returns'][number];
+
+/** An account and the restaurant it belongs to. Owner only. */
+export type AdminAccount =
+  Database['public']['Functions']['owner_list_admins']['Returns'][number];
 export type TableRow = Tables<'tables'>;
 export type Participant = Tables<'participants'>;
 export type Bill = Tables<'bills'>;
