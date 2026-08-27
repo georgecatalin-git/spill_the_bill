@@ -16,8 +16,13 @@ const CODE_LENGTH = 8;
  *
  * The reply is dropped unless it still matches what is in the box, so a slow
  * early request cannot land after a fast later one.
+ *
+ * `enabled` is how the caller says the session is ready. A scanned sticker
+ * opens the app straight onto this screen; asking before the stored session
+ * has been restored answers 401, which would be shown as "that code does not
+ * open a table here" — an accusation, for a code that is perfectly good.
  */
-export function useVenueCode(code: string) {
+export function useVenueCode(code: string, enabled = true) {
   const [venue, setVenue] = useState<RestaurantMatch | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +36,12 @@ export function useVenueCode(code: string) {
     if (!isSupabaseConfigured() || trimmed.length < CODE_LENGTH) {
       setVenue(null);
       setChecking(false);
+      return;
+    }
+
+    if (!enabled) {
+      // Checking, not failing: the code has not been judged yet.
+      setChecking(true);
       return;
     }
 
@@ -51,7 +62,7 @@ export function useVenueCode(code: string) {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [code, trimmed]);
+  }, [code, trimmed, enabled]);
 
   return { venue, checking, error, tooShort: trimmed.length < CODE_LENGTH };
 }

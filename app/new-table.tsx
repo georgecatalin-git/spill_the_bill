@@ -35,7 +35,12 @@ export default function NewTableScreen() {
   // and nothing else. Typing the code by hand reaches the same field.
   const { venue: scannedCode } = useLocalSearchParams<{ venue?: string }>();
 
-  const { user, role } = useAuth();
+  const { user, role, restoring } = useAuth();
+
+  // A deep link lands here on a cold start, before the stored session has been
+  // read back. Every query below needs it, and a 401 would be rendered as a
+  // verdict about the code rather than about the timing.
+  const signedIn = !restoring && Boolean(user);
   const warning = useThemeColor({}, 'warning');
   const border = useThemeColor({}, 'border');
 
@@ -50,8 +55,13 @@ export default function NewTableScreen() {
   const [pending, setPending] = useState(false);
 
   const { matches, searching, error: searchError, tooShort } = useRestaurantSearch(query);
-  const { restaurant: mine, loading: loadingMine, error: mineError } = useMyRestaurant();
-  const { venue, checking, error: venueError, tooShort: codeTooShort } = useVenueCode(venueCode);
+  const { restaurant: mine, loading: loadingMine, error: mineError } = useMyRestaurant(signedIn);
+  const {
+    venue,
+    checking,
+    error: venueError,
+    tooShort: codeTooShort,
+  } = useVenueCode(venueCode, signedIn);
 
   // The account's own restaurant is not a choice, so it is not offered as one.
   // Only the owner picks, because they demo wherever the meeting happens; the
@@ -276,9 +286,9 @@ export default function NewTableScreen() {
                 </>
               )}
 
-              {(restaurantError ?? mineError ?? searchError ?? venueError) && (
+              {(venueError ?? mineError ?? searchError ?? restaurantError) && (
                 <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                  {restaurantError ?? mineError ?? searchError ?? venueError}
+                  {venueError ?? mineError ?? searchError ?? restaurantError}
                 </ThemedText>
               )}
             </View>
