@@ -267,3 +267,33 @@ export async function rotateVenueCode(restaurantId: string): Promise<string> {
   }
   return data as string;
 }
+
+/**
+ * Sets the one account that administers a restaurant, or clears it with null.
+ *
+ * A property of the restaurant, not of the account — which is why it lives on
+ * the restaurant's card and not in the account list. The owner is the only one
+ * who may write it, and the server refuses a guest session identity.
+ */
+export async function setRestaurantAdmin(
+  restaurantId: string,
+  adminId: string | null
+): Promise<void> {
+  const { error } = await supabase.rpc('owner_set_restaurant_admin', {
+    p_restaurant_id: restaurantId,
+    // The generator types every argument as non-null; a SQL parameter always
+    // accepts NULL, and here it means "no admin".
+    p_admin_id: adminId as string,
+  });
+
+  if (error) {
+    if (
+      error.message.includes('Only the owner') ||
+      error.message.includes('real account') ||
+      error.message.includes('no longer exists')
+    ) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not set the administrator.');
+  }
+}

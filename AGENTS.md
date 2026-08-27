@@ -139,6 +139,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827120000_one_code_per_restaurant` | physical tables out; one permanent code per restaurant, the table is what the guests call it |
 | `20260827140000_the_code_is_the_only_way_in` | the account-to-restaurant link goes; a table can only be opened with the printed code |
 | `20260827160000_accounts_are_not_guests` | a scanned-in customer is a session identity, not an account |
+| `20260827180000_a_restaurant_has_one_admin` | `restaurants.admin_user_id`, and a restaurant admin sees its splits |
 
 Regenerate types after any schema change:
 
@@ -539,6 +540,35 @@ restaurant in person anyway.
 `restaurant_name` still appears in the output of `admin_table_summaries` and
 `get_guest_table`, resolved through the join — screens read the field they
 always read.
+
+## A restaurant has one admin
+
+`restaurants.admin_user_id` — one account, set by the platform owner from the
+restaurant's own card. **The direction matters.** The first attempt was
+`profiles.restaurant_id`, an account pointing at a restaurant, which allowed
+many accounts per restaurant with nothing enforcing "one", and framed the fact
+as a property of the person. This is one-to-one by construction and says what
+is true: a restaurant has an administrator.
+
+It is **displayed** on the account list and **edited** only on the restaurant
+card, which is why there is no "link account to restaurant" anywhere. Only the
+owner may write it, and `owner_set_restaurant_admin` refuses a guest session
+identity outright — an anonymous profile can never administer anything.
+
+**A restaurant admin sees their restaurant's splits.** That took widening three
+read policies, not one: `admin_table_summaries` is `security_invoker`, so
+without `bills` and `participants` the sessions would have listed with every
+figure at zero. `administers_restaurant` and `administers_table` are the two
+questions those policies ask, both `SECURITY DEFINER`, both deriving the
+restaurant from the row rather than from anything the client sent.
+
+Verified live: the Italien admin sees Italien and Italien's session; a guest
+sees the restaurant behind their own split and that split alone; the platform
+owner sees everything.
+
+**`tables.admin_id` is still whoever opened the split**, usually a guest, and
+is deliberately not touched by any of this. It is what lets them act on their
+own bill.
 
 ## The printed code is the only way a table is opened
 

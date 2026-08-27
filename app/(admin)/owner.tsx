@@ -25,6 +25,7 @@ import {
   createRestaurant,
   deleteAdminAccount,
   rotateVenueCode,
+  setRestaurantAdmin,
   deleteRestaurant,
   mergeRestaurants,
   setRestaurantStatus,
@@ -218,6 +219,7 @@ export default function OwnerScreen() {
                   key={stat.restaurant_id}
                   stat={stat}
                   mergeTargets={stats.filter((row) => row.restaurant_id !== stat.restaurant_id)}
+                  accounts={accounts}
                   busy={busyId === stat.restaurant_id}
                   onSave={(nextName, nextCity, nextTaxId) =>
                     runOn(stat.restaurant_id, () =>
@@ -240,6 +242,11 @@ export default function OwnerScreen() {
                   }
                   onDelete={() =>
                     runOn(stat.restaurant_id, () => deleteRestaurant(stat.restaurant_id))
+                  }
+                  onSetAdmin={(adminId) =>
+                    runOn(stat.restaurant_id, () =>
+                      setRestaurantAdmin(stat.restaurant_id, adminId)
+                    )
                   }
                   onRotateCode={() =>
                     runOn(stat.restaurant_id, async () => {

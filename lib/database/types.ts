@@ -417,6 +417,7 @@ export type Database = {
       restaurants: {
         Row: {
           address: string | null
+          admin_user_id: string | null
           city: string
           created_at: string
           id: string
@@ -429,6 +430,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          admin_user_id?: string | null
           city: string
           created_at?: string
           id?: string
@@ -441,6 +443,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          admin_user_id?: string | null
           city?: string
           created_at?: string
           id?: string
@@ -451,7 +454,15 @@ export type Database = {
           updated_at?: string
           venue_code?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "restaurants_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tables: {
         Row: {
@@ -908,6 +919,11 @@ export type Database = {
           new_quantity: number
         }[]
       }
+      administers_restaurant: {
+        Args: { p_restaurant_id: string }
+        Returns: boolean
+      }
+      administers_table: { Args: { p_table_id: string }; Returns: boolean }
       apply_assignment_status: {
         Args: { p_bill_id: string }
         Returns: undefined
@@ -1171,11 +1187,11 @@ export type Database = {
         Args: never
         Returns: {
           admin_id: string
+          administers: string
           created_at: string
           email: string
           full_name: string
           role: string
-          sessions_opened: number
         }[]
       }
       owner_merge_restaurants: {
@@ -1186,6 +1202,8 @@ export type Database = {
         Args: never
         Returns: {
           address: string
+          admin_email: string
+          admin_user_id: string
           bills_completed: number
           city: string
           is_active: boolean
@@ -1205,6 +1223,10 @@ export type Database = {
       owner_rotate_venue_code: {
         Args: { p_restaurant_id: string }
         Returns: string
+      }
+      owner_set_restaurant_admin: {
+        Args: { p_admin_id: string; p_restaurant_id: string }
+        Returns: undefined
       }
       owner_set_restaurant_status: {
         Args: { p_restaurant_id: string; p_status: string }

@@ -9,7 +9,7 @@ import { FormField } from '@/components/ui/form-field';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
-import type { OwnerRestaurantStat } from '@/lib/database';
+import type { AdminAccount, OwnerRestaurantStat } from '@/lib/database';
 import { isBlank } from '@/lib/validation';
 
 /**
@@ -42,6 +42,8 @@ type RestaurantRowProps = {
   stat: OwnerRestaurantStat;
   /** The other restaurants, as merge destinations. */
   mergeTargets: OwnerRestaurantStat[];
+  /** Real accounts, as candidates to administer this restaurant. */
+  accounts: AdminAccount[];
   busy: boolean;
   onSave: (name: string, city: string, taxId: string) => Promise<void>;
   onToggleActive: () => Promise<void>;
@@ -49,6 +51,8 @@ type RestaurantRowProps = {
   onDelete: () => Promise<void>;
   /** Issues a new code, retiring every sticker already printed. */
   onRotateCode: () => Promise<void>;
+  /** Owner only: hands the restaurant to one real account, or to nobody. */
+  onSetAdmin: (adminId: string | null) => Promise<void>;
 };
 
 /**
@@ -61,12 +65,14 @@ type RestaurantRowProps = {
 export function RestaurantRow({
   stat,
   mergeTargets,
+  accounts,
   busy,
   onSave,
   onToggleActive,
   onMerge,
   onDelete,
   onRotateCode,
+  onSetAdmin,
 }: RestaurantRowProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
   const success = useThemeColor({}, 'success');
@@ -74,6 +80,7 @@ export function RestaurantRow({
 
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [changingAdmin, setChangingAdmin] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
   const [taxId, setTaxId] = useState(stat.tax_id ?? '');
@@ -149,6 +156,16 @@ export function RestaurantRow({
    * pressed. Bound straight to the Pressable, the rejection had nowhere to go
    * and surfaced as an uncaught promise instead.
    */
+  async function chooseAdmin(adminId: string | null) {
+    setError(null);
+    setChangingAdmin(false);
+    try {
+      await onSetAdmin(adminId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not set the administrator.');
+    }
+  }
+
   async function toggleActive() {
     setError(null);
     try {
@@ -260,6 +277,17 @@ export function RestaurantRow({
   // month ends rather than on the invoice afterwards.
   const overBudget = stat.scan_cost_micros_this_month / 1e6 / 1.08 > 15;
 
+  // The platform owner is not a candidate: they already reach everything, and
+  // making them a restaurant's admin would say something untrue about who runs
+  // the place.
+  const adminOptions: DropdownOption[] = accounts
+    .filter((account) => account.role !== 'owner')
+    .map((account) => ({
+      value: account.admin_id,
+      label: account.email ?? account.full_name,
+      hint: account.administers ?? undefined,
+    }));
+
   const mergeOptions: DropdownOption[] = mergeTargets.map((row) => ({
     value: row.restaurant_id,
     label: row.restaurant_name,
@@ -283,6 +311,13 @@ export function RestaurantRow({
       </View>
 
       <View style={styles.figures}>
+        {/* Whose restaurant this is. A property of the restaurant, which is why
+            it is set here and only displayed on the account list. */}
+        <ThemedText
+          type="secondary"
+          style={[styles.figure, !stat.admin_email && { color: warning }]}>
+          {stat.admin_email ? `Admin: ${stat.admin_email}` : 'No administrator yet'}
+        </ThemedText>
         <ThemedText type="secondary" style={styles.figure}>
           {stat.tables_active} active {stat.tables_active === 1 ? 'split' : 'splits'} ·{' '}
           {stat.tables_total} in total
@@ -321,6 +356,28 @@ export function RestaurantRow({
         </ThemedText>
       )}
 
+      {changingAdmin && (
+        <View style={styles.mergeBox}>
+          <ThemedText type="secondary" style={styles.figure}>
+            Who administers {stat.restaurant_name}? Only real accounts appear —
+            a guest session is never one.
+          </ThemedText>
+
+          <Dropdown
+            value={stat.admin_user_id ?? ''}
+            options={adminOptions}
+            onChange={(id) => void chooseAdmin(id || null)}
+            placeholder="Choose an account"
+          />
+
+          <Pressable onPress={() => setChangingAdmin(false)}>
+            <ThemedText type="secondary" style={styles.link}>
+              Cancel
+            </ThemedText>
+          </Pressable>
+        </View>
+      )}
+
       {merging ? (
         <View style={styles.mergeBox}>
           <ThemedText type="secondary" style={styles.figure}>
@@ -343,6 +400,12 @@ export function RestaurantRow({
           <Pressable onPress={startEditing} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
               Edit
+            </ThemedText>
+          </Pressable>
+
+          <Pressable onPress={() => setChangingAdmin(true)} disabled={busy}>
+            <ThemedText type="secondary" style={styles.link}>
+              {stat.admin_email ? 'Change admin' : 'Set admin'}
             </ThemedText>
           </Pressable>
 

@@ -66,12 +66,12 @@ export function AccountRow({ account, onDelete }: AccountRowProps) {
     // The warning names what survives rather than asking "are you sure". What
     // this destroys is one login; what it deliberately does not destroy is the
     // restaurant's record, and that is the part somebody would worry about.
-    const kept =
-      account.sessions_opened > 0
-        ? `The ${account.sessions_opened} ${
-            account.sessions_opened === 1 ? 'split' : 'splits'
-          } opened by this account stay with their restaurants, but nobody will be able to act on them again.`
-        : 'This account has never opened a table, so nothing else changes.';
+    // Names what survives rather than asking "are you sure". If this account
+    // administers a restaurant, that restaurant is left without one — which is
+    // the part worth knowing before pressing Delete.
+    const kept = account.administers
+      ? `${account.administers} is left without an administrator until you set another one.`
+      : 'No restaurant is left without an administrator.';
 
     const confirmed = await confirmAction({
       title: `Delete ${account.full_name ?? account.email}?`,
@@ -100,8 +100,13 @@ export function AccountRow({ account, onDelete }: AccountRowProps) {
       )}
 
       <View style={styles.actions}>
+        {/* Shown, never edited from here: an admin is set on the restaurant's
+            own card, because it is the restaurant that has an administrator
+            rather than the account that has a restaurant. */}
         <ThemedText type="secondary" style={styles.line}>
-          {account.role === 'owner' ? 'Platform owner' : 'Account'}
+          {account.role === 'owner'
+            ? 'Platform owner'
+            : (account.administers ?? 'No restaurant')}
         </ThemedText>
 
         <Pressable onPress={() => void confirmDelete()}>
