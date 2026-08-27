@@ -141,6 +141,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827160000_accounts_are_not_guests` | a scanned-in customer is a session identity, not an account |
 | `20260827180000_a_restaurant_has_one_admin` | `restaurants.admin_user_id`, and a restaurant admin sees its splits |
 | `20260827200000_one_definition_of_which_restaurant` | `venue_by_code` dropped; the picker asks the same function the gate does |
+| `20260827220000_a_restaurant_admin_has_a_dashboard` | the restaurant sees its own figures, code and details |
 
 Regenerate types after any schema change:
 
@@ -570,6 +571,26 @@ owner sees everything.
 **`tables.admin_id` is still whoever opened the split**, usually a guest, and
 is deliberately not touched by any of this. It is what lets them act on their
 own bill.
+
+**The restaurant's own screen** is the `Restaurant` tab, shown only to an
+account that administers one. `my_restaurant()` finds the row **by** the
+caller — there is no restaurant id the app sends, so there is none a client
+could tamper with, and the hidden tab is a convenience rather than the
+protection.
+
+It carries the figures, the Split code, and the details the restaurant may
+correct itself. `restaurant_admin_update_details` writes **name, town and
+address only**: the fiscal code is what every scanned receipt is checked
+against, so a restaurant that could change it could start accepting another
+company's bills, and the status is what says whether they are a paying
+customer. Both stay with the platform owner, and RLS refuses a restaurant
+admin's direct UPDATE on `restaurants` outright — verified as the
+`authenticated` role: zero rows changed.
+
+The Dashboard splits open splits from closed ones, because they are read for
+different reasons: one is tonight's work, the other is the record. A restaurant
+admin sees every split at their restaurant there, not only the ones they opened
+— that is what widening the read policy on `tables` bought.
 
 ## The printed code is the only way a table is opened
 

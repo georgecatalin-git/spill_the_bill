@@ -20,6 +20,10 @@ export type Restaurant = Tables<'restaurants'>;
 export type RestaurantMatch =
   Database['public']['Functions']['search_restaurants']['Returns'][number];
 
+/** The restaurant the signed-in account administers, with its figures. */
+export type MyRestaurant =
+  Database['public']['Functions']['my_restaurant']['Returns'][number];
+
 /** Where a restaurant is in its life with Split. Only ACTIVE serves customers. */
 export type RestaurantStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
 

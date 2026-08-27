@@ -4,11 +4,16 @@ import { useEffect } from 'react';
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { useAuth } from '@/providers/auth-provider';
 import { useOnboarding } from '@/providers/onboarding-provider';
 
 export default function AdminLayout() {
   const { user, role, restoring } = useAuth();
+  // Whether this account runs a restaurant decides one tab. Same shape as the
+  // owner tab: hiding it is a convenience, and `my_restaurant()` looking the
+  // row up from `auth.uid()` is what actually protects it.
+  const { restaurant } = useMyRestaurant();
   const { shouldAutoStart, claimAutoStart } = useOnboarding();
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
@@ -63,6 +68,17 @@ export default function AdminLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" color={color} size={size} />,
         }}
       />
+      <Tabs.Screen
+        name="restaurant"
+        options={{
+          title: 'Restaurant',
+          href: restaurant ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="storefront-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="owner"
         options={{

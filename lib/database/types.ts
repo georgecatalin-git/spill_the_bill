@@ -1176,6 +1176,25 @@ export type Database = {
           participant_id: string
         }[]
       }
+      my_restaurant: {
+        Args: never
+        Returns: {
+          address: string
+          bills_completed: number
+          city: string
+          guests_this_month: number
+          guests_total: number
+          last_activity_at: string
+          name: string
+          restaurant_id: string
+          splits_active: number
+          splits_this_month: number
+          splits_total: number
+          status: string
+          tax_id: string
+          venue_code: string
+        }[]
+      }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
       normalise_tax_id: { Args: { p_value: string }; Returns: string }
       owner_delete_admin: { Args: { p_admin_id: string }; Returns: undefined }
@@ -1281,6 +1300,10 @@ export type Database = {
           restaurant_id: string
           restaurant_name: string
         }[]
+      }
+      restaurant_admin_update_details: {
+        Args: { p_address: string; p_city: string; p_name: string }
+        Returns: undefined
       }
       search_restaurants: {
         Args: { p_query: string }

@@ -1,5 +1,6 @@
 import type {
   AdminAccount,
+  MyRestaurant,
   OwnerRestaurantStat,
   RestaurantMatch,
   RestaurantStatus,
@@ -303,5 +304,50 @@ export async function setRestaurantAdmin(
       throw new RestaurantServiceError(error.message);
     }
     throw toFriendlyError(error, 'Could not set the administrator.');
+  }
+}
+
+/**
+ * The restaurant this account administers, or null when it administers none.
+ *
+ * The row is found *by* the caller inside `my_restaurant()`, so there is no
+ * restaurant id the app could send — and therefore none it could get wrong or
+ * a client could tamper with.
+ */
+export async function getAdministeredRestaurant(): Promise<MyRestaurant | null> {
+  const { data, error } = await supabase.rpc('my_restaurant');
+
+  if (error) throw toFriendlyError(error, 'Could not load your restaurant.');
+  return data?.[0] ?? null;
+}
+
+/**
+ * Lets a restaurant correct its own name, town and address.
+ *
+ * Never the fiscal code and never the status: the first is what every scanned
+ * receipt is checked against, the second is what says they are a paying
+ * customer. Both stay with the platform owner.
+ */
+export async function updateMyRestaurantDetails(
+  name: string,
+  city: string,
+  address: string
+): Promise<void> {
+  const { error } = await supabase.rpc('restaurant_admin_update_details', {
+    p_name: name,
+    p_city: city,
+    p_address: address,
+  });
+
+  if (error) {
+    if (
+      error.message.includes('does not administer') ||
+      error.message.includes('Please name') ||
+      error.message.includes('Please say') ||
+      error.message.includes('already exists')
+    ) {
+      throw new RestaurantServiceError(error.message);
+    }
+    throw toFriendlyError(error, 'Could not save the restaurant.');
   }
 }

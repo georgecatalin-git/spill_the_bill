@@ -12,15 +12,26 @@ import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getGreeting } from '@/lib/greeting';
 import { openTable, useAdminTables } from '@/lib/services/use-admin-tables';
+import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
   const { tables, loading, error, reload } = useAdminTables();
+  const { restaurant } = useMyRestaurant();
   const warning = useThemeColor({}, 'warning');
 
   // Coming back from creating a table should show it straight away.
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
+
+  // A restaurant's admin sees every split at their restaurant, not only the
+  // ones they opened themselves — the read policy on `tables` was widened for
+  // exactly that. Open and closed are split apart because they are read for
+  // different reasons: one is tonight's work, the other is the record.
+  // `useAdminTables` has already folded the four database statuses into the
+  // two a card shows.
+  const open = tables.filter((table) => table.status !== 'completed');
+  const closed = tables.filter((table) => table.status === 'completed');
 
   return (
     <ThemedView style={styles.container}>
@@ -32,19 +43,23 @@ export default function DashboardScreen() {
 
           <View style={styles.section}>
             <ThemedText type="label" style={styles.sectionLabel}>
-              Your Tables
+              {restaurant ? `Open at ${restaurant.name}` : 'Your Tables'}
             </ThemedText>
 
             {loading && tables.length === 0 ? (
               <ActivityIndicator />
-            ) : tables.length === 0 ? (
+            ) : open.length === 0 ? (
               <EmptyState
-                message="No tables yet"
-                hint="Create your first table to get started."
+                message={restaurant ? 'Nothing open right now' : 'No tables yet'}
+                hint={
+                  restaurant
+                    ? 'A split appears here the moment a guest scans your code.'
+                    : 'Create your first table to get started.'
+                }
               />
             ) : (
               <View style={styles.list}>
-                {tables.map((table) => (
+                {open.map((table) => (
                   <TableCard key={table.id} table={table} onPress={() => openTable(table)} />
                 ))}
               </View>
@@ -56,6 +71,20 @@ export default function DashboardScreen() {
               </ThemedText>
             )}
           </View>
+
+          {closed.length > 0 && (
+            <View style={styles.section}>
+              <ThemedText type="label" style={styles.sectionLabel}>
+                Closed
+              </ThemedText>
+
+              <View style={styles.list}>
+                {closed.map((table) => (
+                  <TableCard key={table.id} table={table} onPress={() => openTable(table)} />
+                ))}
+              </View>
+            </View>
+          )}
         </ScrollView>
 
         <View style={styles.footer}>
