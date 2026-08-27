@@ -136,6 +136,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827060000_a_linked_account_ignores_other_codes` | a restaurant's own account cannot be sent elsewhere by a code |
 | `20260827080000_the_receipt_must_belong_to_the_session` | the fiscal code on the paper must be the session restaurant's |
 | `20260827100000_restaurants_have_a_lifecycle_and_tables` | PENDING → ACTIVE → SUSPENDED → INACTIVE, and one code per physical table |
+| `20260827120000_one_code_per_restaurant` | physical tables out; one permanent code per restaurant, the table is what the guests call it |
 
 Regenerate types after any schema change:
 
@@ -675,21 +676,28 @@ Only ACTIVE serves, and **only a restaurant with `tax_id` may be ACTIVE** — a
 check constraint, because without a code no receipt of theirs could ever be
 validated.
 
-**`restaurant_tables` is the furniture**, and is deliberately not `tables`.
-`tables` is the *session*: a party sitting down, with its bill and its
-participants. A physical table outlives every session held at it, and its code
-is printed once and stuck down. `tables.restaurant_table_id` records which seat
-a session was opened at.
+**One code per restaurant, and no furniture.** `restaurants.venue_code` is a
+single permanent code, printed as many times as the place likes — on the door,
+on every table, on the menu. `resolve_venue_code` turns it into the restaurant,
+and a code that does not exist answers exactly like a restaurant that is not
+ACTIVE, so guessing teaches a stranger nothing.
 
-`resolve_venue_code` answers for **both kinds of printed code** — a
-restaurant-wide one on a poster, or a table's own — because the customer
-presenting one neither knows nor cares which it is. Both are refused unless the
-restaurant is ACTIVE, and a table code is refused if that table has been
-retired. **A wrong code, a retired table and a restaurant that is not ACTIVE
-all give the same sentence**, so guessing teaches a stranger nothing.
+Physical tables were built and removed the same day. A restaurant with thirty
+tables would have had to enter thirty rows and print thirty different stickers
+before it could use Split at all, and at fifty restaurants that becomes
+somebody's job. Nothing about the security model depended on them: the
+restaurant was always derived from the code, and the receipt always had to
+carry that restaurant's fiscal code.
 
-Retiring a table does not un-print its sticker, and cannot. The database stops
-honouring the code instead.
+**What the guests type — "12", "Terasa 3" — lands in `tables.name`**, where
+free text has always lived. It is a label on a session, not an entity. Two
+groups who both type 12 get two separate sessions, because a session's identity
+is its id and never its name; that is what stops one group walking into
+another's bill by typing the same number.
+
+Two kinds of code, and the difference matters: the restaurant's is **permanent**
+and says where you are, while a session's `invite_code` is **temporary** and
+says which bill to join.
 
 ## The receipt must belong to the session
 

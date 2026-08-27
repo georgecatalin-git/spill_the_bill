@@ -3,7 +3,6 @@ import type {
   OwnerRestaurantStat,
   RestaurantMatch,
   RestaurantStatus,
-  RestaurantTable,
 } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
@@ -317,64 +316,4 @@ export async function rotateVenueCode(restaurantId: string): Promise<string> {
     throw toFriendlyError(error, 'Could not issue a new code.');
   }
   return data as string;
-}
-
-/** The physical tables of one restaurant, with the code printed on each. */
-export async function listRestaurantTables(restaurantId: string): Promise<RestaurantTable[]> {
-  const { data, error } = await supabase.rpc('owner_list_tables', {
-    p_restaurant_id: restaurantId,
-  });
-
-  if (error) {
-    if (error.message.includes('Only the owner')) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not load the tables.');
-  }
-  return data ?? [];
-}
-
-/** Adds one physical table and gives it the code that gets printed on it. */
-export async function addRestaurantTable(
-  restaurantId: string,
-  label: string
-): Promise<void> {
-  const { error } = await supabase.rpc('owner_add_table', {
-    p_restaurant_id: restaurantId,
-    p_label: label,
-  });
-
-  if (error) {
-    if (
-      error.message.includes('Only the owner') ||
-      error.message.includes('already has a table') ||
-      error.message.includes('Please name')
-    ) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not add the table.');
-  }
-}
-
-/**
- * Retires or restores one physical table.
- *
- * The sticker stays on the furniture — it cannot be un-printed — so the
- * database stops honouring the code instead.
- */
-export async function setRestaurantTableActive(
-  tableId: string,
-  isActive: boolean
-): Promise<void> {
-  const { error } = await supabase.rpc('owner_set_table_active', {
-    p_table_id: tableId,
-    p_active: isActive,
-  });
-
-  if (error) {
-    if (error.message.includes('Only the owner')) {
-      throw new RestaurantServiceError(error.message);
-    }
-    throw toFriendlyError(error, 'Could not update the table.');
-  }
 }

@@ -9,12 +9,7 @@ import { FormField } from '@/components/ui/form-field';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
-import type { OwnerRestaurantStat, RestaurantTable } from '@/lib/database';
-import {
-  addRestaurantTable,
-  listRestaurantTables,
-  setRestaurantTableActive,
-} from '@/lib/services/restaurant-service';
+import type { OwnerRestaurantStat } from '@/lib/database';
 import { isBlank } from '@/lib/validation';
 
 /**
@@ -79,9 +74,6 @@ export function RestaurantRow({
 
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
-  const [tables, setTables] = useState<RestaurantTable[] | null>(null);
-  const [newLabel, setNewLabel] = useState('');
-  const [tablesBusy, setTablesBusy] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
   const [taxId, setTaxId] = useState(stat.tax_id ?? '');
@@ -148,53 +140,6 @@ export function RestaurantRow({
       await onDelete();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not delete the restaurant.');
-    }
-  }
-
-  /**
-   * The furniture, loaded only when asked for.
-   *
-   * A restaurant with forty tables would otherwise make the owner screen pull
-   * forty rows per card before anybody had shown interest in one.
-   */
-  async function loadTables() {
-    setError(null);
-    setTablesBusy(true);
-    try {
-      setTables(await listRestaurantTables(stat.restaurant_id));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not load the tables.');
-    } finally {
-      setTablesBusy(false);
-    }
-  }
-
-  async function addTable() {
-    if (isBlank(newLabel)) return;
-
-    setError(null);
-    setTablesBusy(true);
-    try {
-      await addRestaurantTable(stat.restaurant_id, newLabel);
-      setNewLabel('');
-      setTables(await listRestaurantTables(stat.restaurant_id));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not add the table.');
-    } finally {
-      setTablesBusy(false);
-    }
-  }
-
-  async function toggleTable(table: RestaurantTable) {
-    setError(null);
-    setTablesBusy(true);
-    try {
-      await setRestaurantTableActive(table.id, !table.is_active);
-      setTables(await listRestaurantTables(stat.restaurant_id));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not update the table.');
-    } finally {
-      setTablesBusy(false);
     }
   }
 
@@ -348,7 +293,8 @@ export function RestaurantRow({
           {lastActive(stat.last_activity_at)}
         </ThemedText>
         <ThemedText type="secondary" style={styles.figure}>
-          Table code <ThemedText style={styles.code}>{stat.venue_code}</ThemedText>
+          Split code <ThemedText style={styles.code}>{stat.venue_code}</ThemedText> · print
+          it as often as you like
         </ThemedText>
         {/* The one field that decides whether this restaurant can work at all:
             a scanned receipt is checked against it, so without one the
@@ -374,64 +320,6 @@ export function RestaurantRow({
         </ThemedText>
       )}
 
-      {tables !== null && (
-        <View style={styles.tablesBox}>
-          <ThemedText type="secondary" style={styles.figure}>
-            Each table gets its own code, printed and stuck to it. A retired table
-            keeps its sticker; the code simply stops working.
-          </ThemedText>
-
-          {tables.length === 0 ? (
-            <ThemedText type="secondary" style={styles.figure}>
-              No tables yet.
-            </ThemedText>
-          ) : (
-            tables.map((table) => (
-              <View key={table.id} style={styles.tableRow}>
-                <View style={styles.tableWho}>
-                  <ThemedText style={styles.tableLabel}>
-                    {table.label} <ThemedText style={styles.code}>{table.table_code}</ThemedText>
-                  </ThemedText>
-                  <ThemedText type="secondary" style={styles.figure}>
-                    {table.sessions_total}{' '}
-                    {table.sessions_total === 1 ? 'session' : 'sessions'}
-                    {table.is_active ? '' : ' · retired'}
-                  </ThemedText>
-                </View>
-
-                <Pressable onPress={() => void toggleTable(table)} disabled={tablesBusy}>
-                  <ThemedText
-                    type="secondary"
-                    style={[styles.link, !table.is_active && { color: success }]}>
-                    {table.is_active ? 'Retire' : 'Restore'}
-                  </ThemedText>
-                </Pressable>
-              </View>
-            ))
-          )}
-
-          <FormField
-            label=""
-            value={newLabel}
-            onChangeText={setNewLabel}
-            placeholder="Masa 5"
-            autoCapitalize="words"
-          />
-          <Button
-            label={tablesBusy ? 'Working…' : 'Add table'}
-            variant="secondary"
-            onPress={() => void addTable()}
-            disabled={tablesBusy}
-          />
-
-          <Pressable onPress={() => setTables(null)}>
-            <ThemedText type="secondary" style={styles.link}>
-              Done
-            </ThemedText>
-          </Pressable>
-        </View>
-      )}
-
       {merging ? (
         <View style={styles.mergeBox}>
           <ThemedText type="secondary" style={styles.figure}>
@@ -454,12 +342,6 @@ export function RestaurantRow({
           <Pressable onPress={startEditing} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
               Edit
-            </ThemedText>
-          </Pressable>
-
-          <Pressable onPress={() => void loadTables()} disabled={busy || tablesBusy}>
-            <ThemedText type="secondary" style={styles.link}>
-              Tables ({stat.physical_tables})
             </ThemedText>
           </Pressable>
 
@@ -538,23 +420,6 @@ const styles = StyleSheet.create({
   },
   mergeBox: {
     gap: Spacing.sm,
-  },
-  tablesBox: {
-    gap: Spacing.sm,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-  tableWho: {
-    flex: 1,
-    gap: 2,
-  },
-  tableLabel: {
-    fontSize: 14,
-    lineHeight: 19,
   },
   editActions: {
     flexDirection: 'row',

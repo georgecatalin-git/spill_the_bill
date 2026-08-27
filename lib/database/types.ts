@@ -425,44 +425,6 @@ export type Database = {
           },
         ]
       }
-      restaurant_tables: {
-        Row: {
-          created_at: string
-          id: string
-          is_active: boolean
-          label: string
-          restaurant_id: string
-          table_code: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          label: string
-          restaurant_id: string
-          table_code?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          label?: string
-          restaurant_id?: string
-          table_code?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "restaurant_tables_restaurant_id_fkey"
-            columns: ["restaurant_id"]
-            isOneToOne: false
-            referencedRelation: "restaurants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       restaurants: {
         Row: {
           address: string | null
@@ -511,7 +473,6 @@ export type Database = {
           invite_code: string
           name: string
           restaurant_id: string
-          restaurant_table_id: string | null
           status: string
           updated_at: string
         }
@@ -523,7 +484,6 @@ export type Database = {
           invite_code?: string
           name: string
           restaurant_id: string
-          restaurant_table_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -535,7 +495,6 @@ export type Database = {
           invite_code?: string
           name?: string
           restaurant_id?: string
-          restaurant_table_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -552,13 +511,6 @@ export type Database = {
             columns: ["restaurant_id"]
             isOneToOne: false
             referencedRelation: "restaurants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tables_restaurant_table_id_fkey"
-            columns: ["restaurant_table_id"]
-            isOneToOne: false
-            referencedRelation: "restaurant_tables"
             referencedColumns: ["id"]
           },
         ]
@@ -1048,7 +1000,6 @@ export type Database = {
       delete_my_account: { Args: never; Returns: undefined }
       generate_invite_code: { Args: { p_length?: number }; Returns: string }
       generate_session_token: { Args: never; Returns: string }
-      generate_table_code: { Args: never; Returns: string }
       generate_venue_code: { Args: never; Returns: string }
       get_admin_participant_id: {
         Args: { p_table_id: string }
@@ -1223,14 +1174,6 @@ export type Database = {
       my_restaurant_id: { Args: never; Returns: string }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
       normalise_tax_id: { Args: { p_value: string }; Returns: string }
-      owner_add_table: {
-        Args: { p_label: string; p_restaurant_id: string }
-        Returns: {
-          id: string
-          label: string
-          table_code: string
-        }[]
-      }
       owner_delete_admin: { Args: { p_admin_id: string }; Returns: undefined }
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string }
@@ -1248,16 +1191,6 @@ export type Database = {
           tables_total: number
         }[]
       }
-      owner_list_tables: {
-        Args: { p_restaurant_id: string }
-        Returns: {
-          id: string
-          is_active: boolean
-          label: string
-          sessions_total: number
-          table_code: string
-        }[]
-      }
       owner_merge_restaurants: {
         Args: { p_source: string; p_target: string }
         Returns: undefined
@@ -1271,7 +1204,6 @@ export type Database = {
           is_active: boolean
           last_activity_at: string
           participants_total: number
-          physical_tables: number
           restaurant_id: string
           restaurant_name: string
           scan_cost_micros_this_month: number
@@ -1293,10 +1225,6 @@ export type Database = {
       }
       owner_set_restaurant_status: {
         Args: { p_restaurant_id: string; p_status: string }
-        Returns: undefined
-      }
-      owner_set_table_active: {
-        Args: { p_active: boolean; p_table_id: string }
         Returns: undefined
       }
       owns_receipt_object: { Args: { p_object_name: string }; Returns: boolean }
@@ -1344,9 +1272,9 @@ export type Database = {
       resolve_venue_code: {
         Args: { p_code: string }
         Returns: {
-          label: string
+          city: string
           restaurant_id: string
-          restaurant_table_id: string
+          restaurant_name: string
         }[]
       }
       search_restaurants: {

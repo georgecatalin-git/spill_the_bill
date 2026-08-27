@@ -23,10 +23,6 @@ export type RestaurantMatch =
 /** Where a restaurant is in its life with Split. Only ACTIVE serves customers. */
 export type RestaurantStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
 
-/** One physical table and the code printed on it. Owner only. */
-export type RestaurantTable =
-  Database['public']['Functions']['owner_list_tables']['Returns'][number];
-
 /** An account and the restaurant it belongs to. Owner only. */
 export type AdminAccount =
   Database['public']['Functions']['owner_list_admins']['Returns'][number];
