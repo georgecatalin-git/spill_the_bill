@@ -19,9 +19,12 @@ import { toCents } from '@/lib/money';
 import { billTotalCents } from '@/lib/split';
 import { toBillItems } from '@/lib/receipt';
 import type { BillItem } from '@/lib/types';
-import { getOrCreateActiveBill, setBillReceiptPath } from '@/lib/services/bill-service';
-import { createBillItem as createRemoteItem } from '@/lib/services/bill-item-service';
-import { deleteReceiptPhoto, uploadReceiptPhoto } from '@/lib/services/receipt-photo-service';
+import { getOrCreateActiveBill } from '@/lib/services/bill-service';
+import {
+  createBillItem as createRemoteItem,
+  getBillItems,
+} from '@/lib/services/bill-item-service';
+import { keepReceiptPhoto } from '@/lib/services/receipt-photo-service';
 
 /** Admin view: verify and correct what was detected before adding it to the bill. */
 export default function ReviewItemsScreen() {
@@ -59,7 +62,14 @@ export default function ReviewItemsScreen() {
     setAddingItem(false);
   }
 
-  /** Writes the reviewed lines onto the table's open bill. */
+  /**
+   * Puts the reviewed lines onto the table's open bill.
+   *
+   * A bill that already holds items is a table that kept its own tab, and those
+   * lines carry people's claims — so the paper is reconciled against them
+   * rather than appended to them. A bill with nothing on it has nothing to
+   * compare, and goes straight in.
+   */
   async function handleConfirm() {
     if (!tableId) {
       setSaveError('This scan is not attached to a table.');
@@ -71,6 +81,29 @@ export default function ReviewItemsScreen() {
 
     try {
       const bill = await getOrCreateActiveBill(tableId);
+      const alreadyOnTheTab = await getBillItems(bill.id);
+
+      if (alreadyOnTheTab.length > 0) {
+        router.push({
+          pathname: '/reconcile-items',
+          params: {
+            tableId,
+            billId: bill.id,
+            uri,
+            currency: bill.currency,
+            printedTotal: String(toCents(state.status === 'ready' ? state.receipt.total : 0)),
+            lines: JSON.stringify(
+              items.map((item) => ({
+                id: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                unitPriceCents: item.unitPriceCents,
+              }))
+            ),
+          },
+        });
+        return;
+      }
 
       for (const item of items) {
         await createRemoteItem(bill.id, {
@@ -85,9 +118,7 @@ export default function ReviewItemsScreen() {
       // admin just confirmed — the receipt is evidence, not the bill itself.
       if (uri) {
         try {
-          const path = await uploadReceiptPhoto(bill.id, uri);
-          const replaced = await setBillReceiptPath(bill.id, path);
-          if (replaced) await deleteReceiptPhoto(replaced);
+          await keepReceiptPhoto(bill.id, uri);
         } catch (photoError) {
           console.warn('Could not keep the receipt photo:', photoError);
           setSaveError('The items were added, but the receipt photo could not be kept.');

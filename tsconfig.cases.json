@@ -1,0 +1,15 @@
+{
+  "//": "Standalone on purpose: `lib/reconcile` is plain TypeScript with no Expo in it, and extending the app's config drags in bundler-only module resolution that Node cannot run. There is no outDir here — the runner passes one outside the project, see scripts/check-reconcile.mjs.",
+  "compilerOptions": {
+    "strict": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2020",
+    "lib": ["es2020", "dom"],
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": { "@/*": ["./*"] },
+    "skipLibCheck": true
+  },
+  "include": ["lib/reconcile/**/*.ts"]
+}

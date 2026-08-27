@@ -105,6 +105,7 @@ supabase/functions/
 lib/
   money.ts               cents, formatting, largest-remainder split
   split.ts               display-side helpers for the receipt rows
+  reconcile/             matches the receipt against the running tab
   services/              every Supabase call lives here, never in a screen
   database/              generated types + readable aliases
 providers/               auth session · guest session · onboarding
@@ -912,21 +913,136 @@ from inside the restaurant, which is a six-hundred-kilometre drive for a client
 in Arad. What remains is that a table can only name a restaurant the owner
 entered, and that every scan is attributed to one.
 
-## Decided, not built: the receipt reconciles against the running tab
+## The receipt reconciles against the running tab
 
-Items can be typed as they are ordered, so a table can keep its own tab through
-the meal rather than waiting for paper. That leaves one question, and it has an
-answer: **when the receipt arrives, it is compared against what was noted and
-the differences are shown.** Not replaced, not appended — reconciled.
+Items can be typed as they are ordered, so a table keeps its own tab through the
+meal rather than waiting for paper. When the receipt arrives it is **compared**
+against what was noted and the differences are shown — not replaced, not
+appended. "The receipt wins" and "concatenate both lists" were both considered
+and are the reason the question was worth asking.
 
-That is the interesting version and the hard one. It needs a way to match a
-typed "bere" against a printed "BERE URSUS 0.5", a screen that shows what is
-only on paper, what is only on the tab, and what disagrees on price, and a
-decision recorded for each. `confirmed_total_cents` already exists for the
-figure it settles on.
+`lib/reconcile/` is the matcher and the plan: pure TypeScript, no network, no
+database, nothing that decides money. It proposes, a person confirms on
+`app/reconcile-items.tsx`, and the confirmed decisions become ordinary item
+writes. Postgres still computes every total, exactly as it always has.
 
-Do not implement it as "the receipt wins" or "both lists are concatenated" —
-both were considered and are the reason the question was worth asking.
+**The screen is only reached when the bill already has items.** A table that
+noted nothing has nothing to compare, and goes from the scan straight to the
+bill as it always did — a diff listing every line as "new" is a step that asks a
+question with one answer. `review-items` makes that call after the scan is
+confirmed, so what gets reconciled is the corrected reading of the paper, not
+the raw one.
+
+**Matching is set to set, never row to row.** This is the shape everything else
+follows from. Adding an item by hand makes one row per drink, so a round of
+three beers is three rows on the tab; the till prints one line reading
+`3 x 8,00`. Some tills do the opposite, and print three. So both sides are
+grouped into products and compared as quantities and line totals — a row-to-row
+matcher fails on the very first round of the evening.
+
+**A matched group keeps its tab rows.** Claims hang off `bill_items.id`, so
+deleting a row to put the receipt's version in its place silently deletes what
+somebody ticked. Nothing here ever proposes that; a match adopts the receipt's
+*numbers* onto the rows that already exist.
+
+**Three bands, and the middle one is the point.** Above 0.75 a match is taken as
+fact, below 0.45 it is not a match. In between the app asks. Resolving the
+middle band by taking the higher score is how a bare "vin" gets silently
+attached to the Chardonnay instead of the house red — and when one typed line
+scores against two printed ones that do not match *each other*, the group is
+reported as ambiguous rather than guessed at.
+
+**A guessed match is confirmed as a match before any number follows from it.**
+A `likely` group defaults to "match by hand", not to a price. Offering "take the
+receipt" there settles money on the strength of a maybe, and "keep the tab"
+settles it just as firmly the other way. This was found by a case that produced
+the right groups and the wrong total: one typed "snitel cu cartofi" against a
+printed dish and its garnish, where accepting both defaults billed the garnish
+twice.
+
+**How names are compared**, in `normalise.ts` and `similarity.ts`:
+
+- The **size is pulled out of the name** and is decisive. "BERE 0.33" and
+  "BERE 0.5" are two products at two prices, and leaving "0" and "5" among the
+  words makes them identical. `0.5`, `500ml`, `50cl`, `300g` and a bare decimal
+  all reduce to ml or g, so "0.33" and "330 ml" are one bottle.
+- **Containment carries most of the weight**, because the typed name is almost
+  always a fragment of the printed one — "bere" against "BERE URSUS 0.5" would
+  score 0.33 on plain overlap and be thrown away.
+- **Every token is weighted by how rare it is** across the lines being compared.
+  "gratar" printed on six lines says almost nothing; "ceafa" printed on one says
+  everything. Without this, "PUI LA GRATAR" and "CEAFA LA GRATAR" share
+  two words in three.
+- **Edit distance counts a swapped pair as one mistake**, not two. Names are
+  four to six letters, where that single point decides everything: plain
+  Levenshtein puts "bere" and "beer" as far apart as two different drinks.
+- A **synonym table** covers what none of the above can reach — "mititei" for
+  "mici", "AQUA" for "apa". It is a starting point. The real answer is a
+  per-restaurant table learned from confirmed matches, so a place that prints
+  "AQUA CARPATICA" for what everyone types as "apa plata" is told once.
+
+**Some receipt lines are not something anybody ordered**, and adding them as
+items would be wrong in both directions at once: service and tip already have
+their own columns and would be counted twice, and a discount cannot be stored at
+all — `unit_price_cents` is checked `>= 0`, because an item that costs less than
+nothing is not a thing that was eaten. The SGR deposit is the one that surprises
+people and is the most Romanian: 50 bani a bottle, its own printed line, and
+real money on the split. It goes on the bill; it is only classified so it is
+recognised rather than matched hopelessly against the drinks.
+
+**Defaults are chosen by what they cost when wrong.** A line on the tab that the
+receipt does not charge for is removed when nobody has claimed it — nobody loses
+anything and the restaurant is not billing it — and kept when somebody has,
+because removing it rewrites their share without them, and a line missing from
+the paper is just as likely to be a line the scan missed. The same reasoning
+refuses to trim a surplus unit when there are no unclaimed units to trim.
+
+**Deciding and writing are separate, and the deciding is pure.** `plan.ts`
+turns answered groups into a list of creates, updates and deletes;
+`reconcile-service.ts` only sends them. That split exists because this is
+where a claim gets lost if anything is wrong, and a function that merely
+*returns* the writes can be run against a real table's rows and read before a
+single one goes out. Deletes are sent first, so a row leaving and an identical
+row arriving never briefly double the table.
+
+**Nothing is ever deleted to make room.** Five beers becoming fifteen is five
+updates and ten inserts, not eight deletes and fifteen inserts — the row George
+had already ticked is the same row afterwards, renamed and repriced. Surplus
+units are shed only from rows nobody claimed; when every one is claimed the
+surplus stays and `keptClaimedSurplus` reports it, because the difference
+belongs on the totals rather than quietly taken off a person.
+
+Verified end to end against the live database on 2026-08-27, on a table at
+Italien holding five typed "bere" (one claimed) and three "pornstar" (two
+claimed), against a receipt reading `Beri Ursus 0.5 × 15` and
+`PORN STAR MARTINI × 3`: the subtotal Postgres computed afterwards was 33000,
+exactly the receipt, and all three claims survived.
+
+**The printed name is adopted everywhere, agreement included.** A row typed
+"pornstar" against a line printed "PORN STAR MARTINI" is the same drink at the
+same price, and the name people will be checking against is the one on the
+paper. So `agreed` means *the figures agree*, not *nothing is written*: such a
+group emits a rename and nothing else. A row already named right is left alone
+rather than written for nothing, and choosing "keep the tab" is a person saying
+the receipt is wrong about that group — its name is not taken either.
+
+`lib/reconcile/cases.ts` is the specification: every shape the two can disagree
+in, and every write those answers turn into, as cases that run.
+
+```bash
+npm run check:reconcile
+```
+
+When a case fails, read the case before touching a threshold. The receipt
+benchmark was once measuring its own bug, and an expectation bent to make the
+code pass is the same mistake wearing different clothes.
+
+**Known limits.** One typed line against a dish and its garnish printed apart
+is surfaced for a human rather than merged. A second receipt for the same table
+has nothing marking which items came from the first, so the two would be
+reconciled against each other. `confirmed_total_cents` is written by nothing on
+this path yet, which is where the few cents a non-dividing line total leaves
+over should eventually land.
 
 ## Not built yet
 

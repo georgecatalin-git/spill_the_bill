@@ -1,5 +1,6 @@
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
+import { setBillReceiptPath } from '@/lib/services/bill-service';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -97,6 +98,20 @@ export async function uploadReceiptPhoto(billId: string, imageUri: string): Prom
   }
 
   return path;
+}
+
+/**
+ * Keeps the photo against a bill, replacing whatever was there.
+ *
+ * Called only once the lines are committed, so an abandoned scan leaves nothing
+ * behind. Both paths that commit lines — the plain scan and the reconciliation
+ * — need exactly this, and the second was written by copying the first, which
+ * is how the two would have drifted.
+ */
+export async function keepReceiptPhoto(billId: string, imageUri: string) {
+  const path = await uploadReceiptPhoto(billId, imageUri);
+  const replaced = await setBillReceiptPath(billId, path);
+  if (replaced) await deleteReceiptPhoto(replaced);
 }
 
 /** Removes a stored photo. Used when replacing one, so nothing is orphaned. */
