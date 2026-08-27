@@ -4,6 +4,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/card';
 import { Dropdown, type DropdownOption } from '@/components/ui/dropdown';
 import { Spacing } from '@/constants/theme';
+import { useState } from 'react';
+
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { confirmAction } from '@/lib/confirm';
 import type { AdminAccount } from '@/lib/database';
@@ -27,6 +29,19 @@ type AccountRowProps = {
 export function AccountRow({ account, options, onLink, onDelete }: AccountRowProps) {
   const warning = useThemeColor({}, 'warning');
   const textSecondary = useThemeColor({}, 'textSecondary');
+
+  // The server's refusals are written for a person to read; without somewhere
+  // to put them they escape as uncaught promise rejections instead.
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<void>, fallback: string) {
+    setError(null);
+    try {
+      await action();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : fallback);
+    }
+  }
 
   // The owner reaches every restaurant through `is_owner()`, so offering them a
   // restaurant here would be offering a setting that changes nothing.
@@ -67,7 +82,7 @@ export function AccountRow({ account, options, onLink, onDelete }: AccountRowPro
     });
 
     if (!confirmed) return;
-    await onDelete();
+    await run(onDelete, 'Could not delete the account.');
   }
 
   return (
@@ -88,9 +103,15 @@ export function AccountRow({ account, options, onLink, onDelete }: AccountRowPro
       <Dropdown
         value={account.restaurant_id ?? ''}
         options={options}
-        onChange={(id) => void onLink(id || null)}
+        onChange={(id) => void run(() => onLink(id || null), 'Could not link the account.')}
         placeholder="Link to a restaurant"
       />
+
+      {error && (
+        <ThemedText type="secondary" style={[styles.line, { color: warning }]}>
+          {error}
+        </ThemedText>
+      )}
 
       <View style={styles.actions}>
         <ThemedText type="secondary" style={styles.line}>

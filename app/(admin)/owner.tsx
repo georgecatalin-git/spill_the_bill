@@ -55,6 +55,7 @@ export default function OwnerScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleAdd = useCallback(async () => {
     if (isBlank(name)) {
@@ -92,9 +93,18 @@ export default function OwnerScreen() {
   const runOn = useCallback(
     async (restaurantId: string, action: () => Promise<void>) => {
       setBusyId(restaurantId);
+      setActionError(null);
       try {
         await action();
         await Promise.all([reload(), reloadAccounts()]);
+      } catch (caught) {
+        // Rethrown so a card that wants to show the refusal in place still
+        // can, and recorded here so nothing can escape as an uncaught
+        // rejection when nobody is listening.
+        setActionError(
+          caught instanceof Error ? caught.message : 'Could not complete that action.'
+        );
+        throw caught;
       } finally {
         setBusyId(null);
       }
@@ -192,9 +202,9 @@ export default function OwnerScreen() {
               </ThemedText>
             </Card>
 
-            {(error ?? accountsError) && (
+            {(error ?? accountsError ?? actionError) && (
               <ThemedText type="secondary" style={{ color: warning }}>
-                {error ?? accountsError}
+                {error ?? accountsError ?? actionError}
               </ThemedText>
             )}
 

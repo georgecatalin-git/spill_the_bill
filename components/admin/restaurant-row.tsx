@@ -198,6 +198,21 @@ export function RestaurantRow({
     }
   }
 
+  /**
+   * The lifecycle refusals are written for a person — "add the fiscal code
+   * before making this restaurant active" — and belong on the card that was
+   * pressed. Bound straight to the Pressable, the rejection had nowhere to go
+   * and surfaced as an uncaught promise instead.
+   */
+  async function toggleActive() {
+    setError(null);
+    try {
+      await onToggleActive();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not update the restaurant.');
+    }
+  }
+
   async function confirmRotate() {
     // Worth a confirmation, because the damage is physical: every sticker in
     // the restaurant stops working the moment this returns.
@@ -454,7 +469,7 @@ export function RestaurantRow({
             </ThemedText>
           </Pressable>
 
-          <Pressable onPress={onToggleActive} disabled={busy}>
+          <Pressable onPress={() => void toggleActive()} disabled={busy}>
             <ThemedText type="secondary" style={styles.link}>
               {stat.is_active ? 'Stand down' : 'Make active'}
             </ThemedText>
