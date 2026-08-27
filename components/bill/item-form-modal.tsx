@@ -28,19 +28,6 @@ type ItemFormModalProps = {
   initialPriceCents?: number;
   initialQuantity?: number;
   /**
-   * Whether to ask for a quantity.
-   *
-   * Off when adding by hand: a round is three taps of "beer" rather than one
-   * line of three, which is faster to enter while the order is happening and
-   * leaves each drink claimable on its own — no "3 of 4 claimed" to work out.
-   * The split lands in the same place either way.
-   *
-   * On when editing, because the scanner does produce quantities — a receipt
-   * line reading "3 Cola 7.50" comes back as three — and those have to stay
-   * correctable.
-   */
-  showQuantity?: boolean;
-  /**
    * Who the order can be put on, offered while adding.
    *
    * A waiter taking an order does one thing — "a beer for George" — and
@@ -55,6 +42,10 @@ type ItemFormModalProps = {
  * Bottom sheet for entering one bill item by hand, used both to add a new item
  * and to edit a detected one. Mount it with a `key` when editing so the fields
  * start from the item being edited.
+ *
+ * The quantity is always asked for. It was once hidden while adding, on the
+ * theory that a round is three taps of "beer" rather than one line of three;
+ * see AGENTS.md for why that was reversed.
  */
 export function ItemFormModal({
   visible,
@@ -65,7 +56,6 @@ export function ItemFormModal({
   initialName = '',
   initialPriceCents,
   initialQuantity = 1,
-  showQuantity = true,
   people = [],
 }: ItemFormModalProps) {
   const border = useThemeColor({}, 'border');
@@ -123,7 +113,7 @@ export function ItemFormModal({
       </View>
 
       <View style={styles.priceRow}>
-        <View style={[styles.field, showQuantity ? styles.priceField : styles.priceFieldWide]}>
+        <View style={[styles.field, styles.priceField]}>
           <ThemedText type="label" style={styles.fieldLabel}>
             Price
           </ThemedText>
@@ -137,21 +127,19 @@ export function ItemFormModal({
           />
         </View>
 
-        {showQuantity && (
-          <View style={[styles.field, styles.quantityField]}>
-            <ThemedText type="label" style={styles.fieldLabel}>
-              Qty
-            </ThemedText>
-            <TextField
-              value={quantity}
-              onChangeText={setQuantity}
-              placeholder="1"
-              keyboardType="number-pad"
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-            />
-          </View>
-        )}
+        <View style={[styles.field, styles.quantityField]}>
+          <ThemedText type="label" style={styles.fieldLabel}>
+            Qty
+          </ThemedText>
+          <TextField
+            value={quantity}
+            onChangeText={setQuantity}
+            placeholder="1"
+            keyboardType="number-pad"
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
+          />
+        </View>
       </View>
 
       {people.length > 0 && (
@@ -229,9 +217,6 @@ const styles = StyleSheet.create({
   personLabel: {
     fontSize: 14,
     lineHeight: 19,
-  },
-  priceFieldWide: {
-    flex: 1,
   },
   quantityField: {
     flex: 1,

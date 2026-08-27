@@ -388,6 +388,21 @@ function planned(title: string, plan: ApplyPlan, expect: [string, boolean][]) {
 }
 
 {
+  // A tab that counted: one row of five, not five rows of one. This is the
+  // shape the add form produces now that it asks for a quantity again.
+  const plan = planFor([t('bere', 5, 1500, 1)], [r('Beri Ursus 0.5', 15, 1500)]);
+  const c = counts(plan);
+  const update = plan.items.find((w) => w.action === 'update');
+
+  planned('a counted row counts higher, rather than growing a second row', plan, [
+    ['one write, and it is an update', plan.items.length === 1 && c.updates === 1],
+    ['the row now reads fifteen', update?.action === 'update' && update.quantity === 15],
+    ['at the printed name and price',
+      update?.action === 'update' && update.name === 'Beri Ursus 0.5' && update.unitPriceCents === 1500],
+  ]);
+}
+
+{
   // Four on the tab, three charged, and every one of them claimed. The matcher
   // would not offer this; the admin can still choose it, and it must not take a
   // beer off somebody.

@@ -518,7 +518,6 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
 
       <ItemFormModal
         visible={addVisible}
-        showQuantity={false}
         people={bill.participants.map((person) => ({ id: person.id, name: person.name }))}
         onSubmit={async (name, unitPriceCents, quantity, forPersonId) => {
           setAddVisible(false);

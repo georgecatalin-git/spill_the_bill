@@ -58,14 +58,30 @@ change what was put on their share; `claim_item` and `remove_item_claim` are
 untouched, as they have been since the host was first allowed to record for
 others.
 
-**Adding by hand asks for no quantity.** A round is three taps of "beer"
-rather than one line of three: faster while the order is happening, and each
-drink is then claimable on its own, with no "3 of 4 claimed" for anybody to
-work out. The split lands in exactly the same place. The field survives in the
-*edit* form, because the scanner does produce quantities — a line reading
-"3 Cola 7.50" comes back as three — and those must stay correctable. It also
-survives on the review screen, where somebody is checking a scan against the
-paper in their hand and the printed quantities matter.
+**Adding by hand asks for a quantity.** It once did not: a round was three taps
+of "beer" rather than one line of three, on the argument that it is faster while
+the order is happening and leaves each drink claimable on its own, with no
+"3 of 4 claimed" for anybody to work out. That was reversed, and the reason is
+worth keeping.
+
+The argument only holds at three. At fifteen it is fifteen taps, and then
+fifteen identical rows to read down — and reading down a bill is the thing
+people actually do with it. Reconciliation is what made it plain: a table that
+had noted five beers against a receipt charging for fifteen came back as
+fifteen separate lines saying the same word, and nobody can check that against
+a piece of paper.
+
+What was true in the old argument stays true, and now it is a **choice rather
+than a default**. `quantity = 1` is still a shareable line and `quantity > 1` is
+still a counted one, so typing 15 asks for "15, counted out" and leaving it at 1
+asks for "one, split between whoever claims it". A round meant to be ticked off
+one drink at a time is still entered one drink at a time; it is simply no longer
+the only way.
+
+Reconciliation follows the shape it finds. A tab of single rows gains more
+single rows, because each of those has to stay claimable on its own; a row that
+already counts just counts higher — five beers turning out to be fifteen is one
+row reading fifteen, never a row of five beside a row of ten.
 
 **Two kinds of receipt line**, and they behave differently:
 - `quantity > 1` — unit based. Units are counted out and cannot be

@@ -96,10 +96,19 @@ function settleOnReceipt(group: ReconGroup, into: ItemWrite[]) {
   const shortfall = group.receiptQuantity - held();
 
   if (shortfall > 0) {
-    if (singleUnitRows) {
+    const counted = slots.find((slot) => slot.quantity > 0);
+
+    if (singleUnitRows || !counted) {
+      // Rows of one are a table that ticks drinks individually, and each of
+      // those has to stay claimable on its own. More of them is the only shape
+      // that keeps that true.
       for (let i = 0; i < shortfall; i++) slots.push({ id: null, quantity: 1, claimed: 0 });
     } else {
-      slots.push({ id: null, quantity: shortfall, claimed: 0 });
+      // A row that already counts should just count higher. Five beers turning
+      // out to be fifteen is one row reading fifteen, not a row of five beside
+      // a row of ten — the reader is checking a number against the paper, and
+      // two numbers to add up is the thing that made this worth writing.
+      counted.quantity += shortfall;
     }
   }
 
