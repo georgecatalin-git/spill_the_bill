@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -30,13 +30,19 @@ import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function NewTableScreen() {
+  // Arrives from the code printed in the restaurant: the sticker's link lands
+  // here with the venue already filled in, so a customer types a table name
+  // and nothing else. Typing the code by hand reaches the same field.
+  const { venue: scannedCode } = useLocalSearchParams<{ venue?: string }>();
+
   const { user, role } = useAuth();
   const warning = useThemeColor({}, 'warning');
   const border = useThemeColor({}, 'border');
 
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
-  const [venueCode, setVenueCode] = useState('');
+  const [venueCode, setVenueCode] = useState((scannedCode ?? '').toUpperCase());
+  const [codeMode, setCodeMode] = useState(Boolean(scannedCode));
   const [chosen, setChosen] = useState<RestaurantMatch | null>(null);
   const [error, setError] = useState<string>();
   const [restaurantError, setRestaurantError] = useState<string>();
@@ -53,11 +59,19 @@ export default function NewTableScreen() {
   // `prevent_table_at_another_restaurant`.
   const picks = role === 'owner';
 
-  // Three ways in, and the account decides which. The owner searches, staff
-  // have their restaurant already, and anybody else is a customer holding the
-  // code printed on the table in front of them.
-  const usesCode = !picks && !loadingMine && !mine;
-  const restaurant = picks ? chosen : usesCode ? venue : mine;
+  // A code that has actually been presented wins for everybody. It is proof of
+  // sitting in the restaurant, and there is no reason an owner or a waiter
+  // holding one should be refused it — the first version tied the code to
+  // "account with no restaurant", which quietly threw away a scanned sticker
+  // for the two kinds of account most likely to be testing one.
+  //
+  // Otherwise the account decides: the owner searches, staff already have
+  // their restaurant, and anybody else has nothing but a code.
+  const usesCode = codeMode || (!picks && !loadingMine && !mine);
+  const restaurant = usesCode ? venue : picks ? chosen : mine;
+
+  /** Only these two have somewhere else to go if they change their mind. */
+  const canLeaveCodeMode = picks || Boolean(mine);
 
   function pick(match: RestaurantMatch) {
     setChosen(match);
@@ -74,9 +88,9 @@ export default function NewTableScreen() {
 
     if (!restaurant) {
       setRestaurantError(
-        picks
-          ? 'Type the restaurant you are in and pick it from the list.'
-          : 'Enter the code printed on your table.'
+        usesCode
+          ? 'Enter the code printed on your table.'
+          : 'Type the restaurant you are in and pick it from the list.'
       );
       return;
     }
@@ -142,46 +156,66 @@ export default function NewTableScreen() {
                 Restaurant
               </ThemedText>
 
-              {!picks ? (
+              {usesCode ? (
+                <>
+                  <FormField
+                    label=""
+                    value={venueCode}
+                    onChangeText={(text) => {
+                      setVenueCode(text.toUpperCase());
+                      setRestaurantError(undefined);
+                    }}
+                    placeholder="Code printed on your table"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+
+                  {venue ? (
+                    <ThemedText style={styles.fixedRestaurant}>
+                      {venue.name} · {venue.city}
+                    </ThemedText>
+                  ) : codeTooShort ? (
+                    <ThemedText type="secondary" style={styles.hint}>
+                      The code is on a sticker on your table.
+                    </ThemedText>
+                  ) : checking ? (
+                    <ThemedText type="secondary" style={styles.hint}>
+                      Checking…
+                    </ThemedText>
+                  ) : (
+                    <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
+                      That code does not open a table here.
+                    </ThemedText>
+                  )}
+
+                  {canLeaveCodeMode && (
+                    <Pressable
+                      onPress={() => {
+                        setCodeMode(false);
+                        setVenueCode('');
+                        setRestaurantError(undefined);
+                      }}>
+                      <ThemedText type="secondary" style={styles.switch}>
+                        {picks ? 'Search for a restaurant instead' : 'Use my own restaurant instead'}
+                      </ThemedText>
+                    </Pressable>
+                  )}
+                </>
+              ) : !picks ? (
                 loadingMine ? (
                   <ThemedText type="secondary" style={styles.hint}>
                     Loading…
                   </ThemedText>
-                ) : mine ? (
-                  <ThemedText style={styles.fixedRestaurant}>
-                    {mine.name} · {mine.city}
-                  </ThemedText>
                 ) : (
                   <>
-                    <FormField
-                      label=""
-                      value={venueCode}
-                      onChangeText={(text) => {
-                        setVenueCode(text.toUpperCase());
-                        setRestaurantError(undefined);
-                      }}
-                      placeholder="Code printed on your table"
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                    />
-
-                    {venue ? (
-                      <ThemedText style={styles.fixedRestaurant}>
-                        {venue.name} · {venue.city}
+                    <ThemedText style={styles.fixedRestaurant}>
+                      {mine?.name} · {mine?.city}
+                    </ThemedText>
+                    <Pressable onPress={() => setCodeMode(true)}>
+                      <ThemedText type="secondary" style={styles.switch}>
+                        I have a table code
                       </ThemedText>
-                    ) : codeTooShort ? (
-                      <ThemedText type="secondary" style={styles.hint}>
-                        The code is on a sticker on your table.
-                      </ThemedText>
-                    ) : checking ? (
-                      <ThemedText type="secondary" style={styles.hint}>
-                        Checking…
-                      </ThemedText>
-                    ) : (
-                      <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
-                        That code does not open a table here.
-                      </ThemedText>
-                    )}
+                    </Pressable>
                   </>
                 )
               ) : (
@@ -233,6 +267,12 @@ export default function NewTableScreen() {
                       ))}
                     </View>
                   )}
+
+                  <Pressable onPress={() => setCodeMode(true)}>
+                    <ThemedText type="secondary" style={styles.switch}>
+                      I have a table code
+                    </ThemedText>
+                  </Pressable>
                 </>
               )}
 
@@ -276,6 +316,10 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: Spacing.sm,
+  },
+  switch: {
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   fixedRestaurant: {
     fontSize: 17,
