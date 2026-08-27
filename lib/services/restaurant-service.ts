@@ -12,6 +12,17 @@ import { supabase } from '@/lib/supabase';
 
 export class RestaurantServiceError extends Error {}
 
+/**
+ * An empty fiscal code is stored as null rather than as "".
+ *
+ * A restaurant with no code cannot be active — the database says so with a
+ * check constraint — because there would be nothing for a scanned receipt to
+ * be compared against, and every scan there would be refused.
+ */
+function toTaxId(value: string): string | null {
+  return value.trim() || null;
+}
+
 function toFriendlyError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
 
@@ -39,10 +50,14 @@ export async function searchRestaurants(query: string): Promise<RestaurantMatch[
   return data ?? [];
 }
 
-export async function createRestaurant(name: string, city: string): Promise<RestaurantMatch> {
+export async function createRestaurant(
+  name: string,
+  city: string,
+  taxId: string
+): Promise<RestaurantMatch> {
   const { data, error } = await supabase
     .from('restaurants')
-    .insert({ name: name.trim(), city: city.trim() })
+    .insert({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
     .select('id, name, city')
     .single();
 
@@ -60,21 +75,27 @@ export async function createRestaurant(name: string, city: string): Promise<Rest
   return data;
 }
 
-/** Corrects a name or a town. Owner only — RLS refuses everyone else. */
+/** Corrects a name, a town or the fiscal code. Owner only — RLS refuses everyone else. */
 export async function updateRestaurant(
   restaurantId: string,
   name: string,
-  city: string
+  city: string,
+  taxId: string
 ): Promise<void> {
   const { error } = await supabase
     .from('restaurants')
-    .update({ name: name.trim(), city: city.trim() })
+    .update({ name: name.trim(), city: city.trim(), tax_id: toTaxId(taxId) })
     .eq('id', restaurantId);
 
   if (error) {
     if (error.message.includes('duplicate key')) {
       throw new RestaurantServiceError(
         `${name.trim()} in ${city.trim()} is already on the list. Merge them instead.`
+      );
+    }
+    if (error.message.includes('restaurants_active_needs_tax_id')) {
+      throw new RestaurantServiceError(
+        'An active restaurant needs its fiscal code — it is what a scanned receipt is checked against.'
       );
     }
     throw toFriendlyError(error, 'Could not save the restaurant.');

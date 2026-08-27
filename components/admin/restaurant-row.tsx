@@ -43,7 +43,7 @@ type RestaurantRowProps = {
   /** The other restaurants, as merge destinations. */
   mergeTargets: OwnerRestaurantStat[];
   busy: boolean;
-  onSave: (name: string, city: string) => Promise<void>;
+  onSave: (name: string, city: string, taxId: string) => Promise<void>;
   onToggleActive: () => Promise<void>;
   onMerge: (targetId: string) => Promise<void>;
   onDelete: () => Promise<void>;
@@ -76,6 +76,7 @@ export function RestaurantRow({
   const [merging, setMerging] = useState(false);
   const [name, setName] = useState(stat.restaurant_name);
   const [city, setCity] = useState(stat.city);
+  const [taxId, setTaxId] = useState(stat.tax_id ?? '');
 
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
@@ -84,6 +85,7 @@ export function RestaurantRow({
   function startEditing() {
     setName(stat.restaurant_name);
     setCity(stat.city);
+    setTaxId(stat.tax_id ?? '');
     setNameError(undefined);
     setCityError(undefined);
     setError(null);
@@ -107,7 +109,7 @@ export function RestaurantRow({
 
     setError(null);
     try {
-      await onSave(name, city);
+      await onSave(name, city, taxId);
       setEditing(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not save the restaurant.');
@@ -212,6 +214,13 @@ export function RestaurantRow({
           autoCapitalize="words"
           error={cityError}
         />
+        <FormField
+          label="Fiscal code (CUI)"
+          value={taxId}
+          onChangeText={setTaxId}
+          placeholder="RO12345678"
+          autoCapitalize="characters"
+        />
 
         {error && (
           <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
@@ -271,6 +280,14 @@ export function RestaurantRow({
         <ThemedText type="secondary" style={styles.figure}>
           Table code <ThemedText style={styles.code}>{stat.venue_code}</ThemedText>
         </ThemedText>
+        {/* The one field that decides whether this restaurant can work at all:
+            a scanned receipt is checked against it, so without one the
+            database refuses to let the restaurant be active. */}
+        {!stat.tax_id && (
+          <ThemedText type="secondary" style={[styles.figure, { color: warning }]}>
+            No fiscal code — add it before this restaurant can be active
+          </ThemedText>
+        )}
         <ThemedText
           type="secondary"
           style={[styles.figure, overBudget && { color: warning }]}>

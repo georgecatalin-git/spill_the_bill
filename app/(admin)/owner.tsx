@@ -48,8 +48,10 @@ export default function OwnerScreen() {
 
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
+  const [taxId, setTaxId] = useState('');
   const [nameError, setNameError] = useState<string>();
   const [cityError, setCityError] = useState<string>();
+  const [taxIdError, setTaxIdError] = useState<string>();
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -67,19 +69,25 @@ export default function OwnerScreen() {
       return;
     }
 
+    if (isBlank(taxId)) {
+      setTaxIdError('Required — a scanned receipt is checked against it.');
+      return;
+    }
+
     setFormError(null);
     setPending(true);
     try {
-      await createRestaurant(name, city);
+      await createRestaurant(name, city, taxId);
       setName('');
       setCity('');
+      setTaxId('');
       await reload();
     } catch (caught) {
       setFormError(caught instanceof Error ? caught.message : 'Could not add the restaurant.');
     } finally {
       setPending(false);
     }
-  }, [name, city, reload]);
+  }, [name, city, taxId, reload]);
 
   const runOn = useCallback(
     async (restaurantId: string, action: () => Promise<void>) => {
@@ -209,9 +217,9 @@ export default function OwnerScreen() {
                   stat={stat}
                   mergeTargets={stats.filter((row) => row.restaurant_id !== stat.restaurant_id)}
                   busy={busyId === stat.restaurant_id}
-                  onSave={(nextName, nextCity) =>
+                  onSave={(nextName, nextCity, nextTaxId) =>
                     runOn(stat.restaurant_id, () =>
-                      updateRestaurant(stat.restaurant_id, nextName, nextCity)
+                      updateRestaurant(stat.restaurant_id, nextName, nextCity, nextTaxId)
                     )
                   }
                   onToggleActive={() =>
@@ -292,6 +300,21 @@ export default function OwnerScreen() {
                   placeholder="Cluj-Napoca"
                   autoCapitalize="words"
                   error={cityError}
+                />
+
+                {/* Required, because an active restaurant without one cannot
+                    have a single receipt checked — the database refuses the
+                    combination outright. */}
+                <FormField
+                  label="Fiscal code (CUI)"
+                  value={taxId}
+                  onChangeText={(text) => {
+                    setTaxId(text);
+                    setTaxIdError(undefined);
+                  }}
+                  placeholder="RO12345678"
+                  autoCapitalize="characters"
+                  error={taxIdError}
                 />
 
 

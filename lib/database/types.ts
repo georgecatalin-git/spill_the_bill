@@ -83,7 +83,11 @@ export type Database = {
           created_at: string
           currency: string
           id: string
+          receipt_issued_at: string | null
+          receipt_number: string | null
           receipt_path: string | null
+          receipt_tax_id: string | null
+          receipt_total_cents: number | null
           service_charge_cents: number
           split_mode: Database["public"]["Enums"]["split_mode"]
           status: string
@@ -100,7 +104,11 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
+          receipt_issued_at?: string | null
+          receipt_number?: string | null
           receipt_path?: string | null
+          receipt_tax_id?: string | null
+          receipt_total_cents?: number | null
           service_charge_cents?: number
           split_mode?: Database["public"]["Enums"]["split_mode"]
           status?: string
@@ -117,7 +125,11 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
+          receipt_issued_at?: string | null
+          receipt_number?: string | null
           receipt_path?: string | null
+          receipt_tax_id?: string | null
+          receipt_total_cents?: number | null
           service_charge_cents?: number
           split_mode?: Database["public"]["Enums"]["split_mode"]
           status?: string
@@ -415,29 +427,35 @@ export type Database = {
       }
       restaurants: {
         Row: {
+          address: string | null
           city: string
           created_at: string
           id: string
           is_active: boolean
           name: string
+          tax_id: string | null
           updated_at: string
           venue_code: string
         }
         Insert: {
+          address?: string | null
           city: string
           created_at?: string
           id?: string
           is_active?: boolean
           name: string
+          tax_id?: string | null
           updated_at?: string
           venue_code?: string
         }
         Update: {
+          address?: string | null
           city?: string
           created_at?: string
           id?: string
           is_active?: boolean
           name?: string
+          tax_id?: string | null
           updated_at?: string
           venue_code?: string
         }
@@ -447,6 +465,7 @@ export type Database = {
         Row: {
           admin_id: string | null
           created_at: string
+          expires_at: string
           id: string
           invite_code: string
           name: string
@@ -457,6 +476,7 @@ export type Database = {
         Insert: {
           admin_id?: string | null
           created_at?: string
+          expires_at?: string
           id?: string
           invite_code?: string
           name: string
@@ -467,6 +487,7 @@ export type Database = {
         Update: {
           admin_id?: string | null
           created_at?: string
+          expires_at?: string
           id?: string
           invite_code?: string
           name?: string
@@ -899,6 +920,16 @@ export type Database = {
         Args: { p_bill_id: string }
         Returns: undefined
       }
+      attach_receipt_to_bill: {
+        Args: {
+          p_receipt_issued_at: string
+          p_receipt_number: string
+          p_receipt_tax_id: string
+          p_receipt_total_cents: number
+          p_table_id: string
+        }
+        Returns: string
+      }
       bill_assigned_cents: { Args: { p_bill_id: string }; Returns: number }
       bill_claimable_cents: { Args: { p_bill_id: string }; Returns: number }
       bill_is_completed: { Args: { p_bill_id: string }; Returns: boolean }
@@ -932,7 +963,11 @@ export type Database = {
           created_at: string
           currency: string
           id: string
+          receipt_issued_at: string | null
+          receipt_number: string | null
           receipt_path: string | null
+          receipt_tax_id: string | null
+          receipt_total_cents: number | null
           service_charge_cents: number
           split_mode: Database["public"]["Enums"]["split_mode"]
           status: string
@@ -1135,6 +1170,7 @@ export type Database = {
       }
       my_restaurant_id: { Args: never; Returns: string }
       normalise_business_name: { Args: { p_value: string }; Returns: string }
+      normalise_tax_id: { Args: { p_value: string }; Returns: string }
       owner_delete_admin: { Args: { p_admin_id: string }; Returns: undefined }
       owner_delete_restaurant: {
         Args: { p_restaurant_id: string }
@@ -1159,6 +1195,7 @@ export type Database = {
       owner_restaurant_stats: {
         Args: never
         Returns: {
+          address: string
           bills_completed: number
           city: string
           is_active: boolean
@@ -1170,6 +1207,7 @@ export type Database = {
           scans_this_month: number
           tables_active: number
           tables_total: number
+          tax_id: string
           venue_code: string
         }[]
       }
@@ -1242,7 +1280,11 @@ export type Database = {
           created_at: string
           currency: string
           id: string
+          receipt_issued_at: string | null
+          receipt_number: string | null
           receipt_path: string | null
+          receipt_tax_id: string | null
+          receipt_total_cents: number | null
           service_charge_cents: number
           split_mode: Database["public"]["Enums"]["split_mode"]
           status: string
@@ -1297,7 +1339,11 @@ export type Database = {
           created_at: string
           currency: string
           id: string
+          receipt_issued_at: string | null
+          receipt_number: string | null
           receipt_path: string | null
+          receipt_tax_id: string | null
+          receipt_total_cents: number | null
           service_charge_cents: number
           split_mode: Database["public"]["Enums"]["split_mode"]
           status: string

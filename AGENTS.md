@@ -134,6 +134,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827020000_accounts_can_be_deleted` | an account can be removed, and the restaurant keeps its tables |
 | `20260827040000_a_code_on_the_table_opens_a_table` | a customer opens a table with the code printed in the restaurant |
 | `20260827060000_a_linked_account_ignores_other_codes` | a restaurant's own account cannot be sent elsewhere by a code |
+| `20260827080000_the_receipt_must_belong_to_the_session` | the fiscal code on the paper must be the session restaurant's |
 
 Regenerate types after any schema change:
 
@@ -653,6 +654,53 @@ Storage is deliberately untouched. Receipt photos live in a bucket, the tables
 survive here anyway, and this project has already learned that deleting storage
 objects from Postgres raises inside `storage.protect_delete` and takes the
 parent row down with it.
+
+## The receipt must belong to the session
+
+The QR says which restaurant the session is at. **The receipt has to prove the
+bill is from there.** Without the second half, a customer opens a table at
+Italien with Italien's own code — legitimately — photographs a receipt from
+somewhere that has never heard of Split, and the lines land on Italien's table:
+the other place gets the product for nothing, and Italien's figures fill with
+somebody else's dinner.
+
+`attach_receipt_to_bill` is the gate, and every check is in it:
+
+- the restaurant is **derived from the session**, never accepted from a caller
+- it must be active, the table not closed, and `tables.expires_at` in the future
+- `normalise_tax_id(receipt) = normalise_tax_id(restaurant)` — digits only, so
+  spelling and a misread full stop cannot accuse an honest customer
+- the receipt's date must be no older than two hours before the session opened
+  and not in the future
+- a unique index on `(receipt_tax_id, receipt_number, receipt_issued_at)` makes
+  a receipt single-use across sessions — while re-scanning it into the *same*
+  session stays a normal retry
+
+**Where the values come from is the whole point.** The fiscal code is read off
+the photo inside `parse-receipt` and travels to Postgres with the service key;
+it never passes through the phone. The four `bills.receipt_*` columns carry no
+UPDATE grant for `authenticated` — the table-wide UPDATE was revoked and the
+app's own columns granted back by name — so a client cannot write a receipt
+identity of its own choosing either.
+
+**No fallback when the code cannot be read.** "We could not find it, so we
+accept" is the hole every version of this check has eventually been defeated
+through. The refusal is an instruction instead: photograph the whole fiscal
+receipt.
+
+**An active restaurant must have `tax_id`**, enforced by a check constraint,
+because a restaurant with no code has nothing for a receipt to be compared
+against and every scan there would be refused. Rather than let that happen
+quietly, the constraint says it out loud.
+
+**What this deliberately does not cover:** items typed in by hand. There is no
+receipt to compare and nothing to compare it against. That path costs nothing
+to serve, which is why it stays open — but do not describe the rule as though
+it closed it.
+
+`tables` is the session. It gained `expires_at` (twelve hours) rather than
+being duplicated by a second entity with the same job; the existing statuses
+were left alone, because nothing in this rule needs them renamed.
 
 ## Typed, not listed — and no scan without the code
 

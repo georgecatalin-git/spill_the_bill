@@ -38,8 +38,24 @@ const RECEIPT_SCHEMA = {
       type: 'string',
       enum: ['EUR', 'RON', 'GBP', 'PLN', 'CHF', 'USD'],
     },
+    // Who printed this, and which piece of paper it is. Read so the server can
+    // refuse a receipt from somewhere other than the session's restaurant, and
+    // refuse the same receipt twice. Empty strings rather than nulls: a
+    // nullable type is not something structured outputs promise to honour.
+    merchant_tax_id: { type: 'string' },
+    merchant_name: { type: 'string' },
+    receipt_number: { type: 'string' },
+    issued_at: { type: 'string' },
   },
-  required: ['items', 'total', 'currency'],
+  required: [
+    'items',
+    'total',
+    'currency',
+    'merchant_tax_id',
+    'merchant_name',
+    'receipt_number',
+    'issued_at',
+  ],
   additionalProperties: false,
 } as const;
 
@@ -67,6 +83,24 @@ including tax and service. Not the sum of the item lines.
 
 currency: infer it from the symbol or code on the receipt. If nothing on the
 receipt indicates one, use EUR.
+
+merchant_tax_id: the fiscal registration code of the business that printed
+this receipt, from the header. On Romanian receipts it is labelled CUI, C.U.I.,
+CIF or C.I.F., sometimes with an RO prefix. Copy the digits exactly as printed,
+in order.
+
+merchant_name: the business name as printed.
+
+receipt_number: the fiscal receipt's own number, however it is labelled — "BON
+FISCAL NR", "NR BON", "#". Digits and letters as printed.
+
+issued_at: the date and time printed on the receipt, as ISO 8601
+(2026-08-27T20:15:00). If only a date is printed, use midday. Romanian receipts
+print day-first: 27-08-2026 is the 27th of August.
+
+Use an empty string for any of these four when it is not printed or not
+legible, and NEVER guess at one. They are compared against a record, and an
+invented value refuses an honest customer or lets a dishonest one through.
 
 Read only what is there. If a line is illegible, leave it out rather than
 guessing at it — a missing line is obvious to the reviewer, an invented one is
@@ -134,6 +168,47 @@ async function resolveRestaurant(tableId: string, adminId: string): Promise<stri
   return (data as string | null) ?? null;
 }
 
+/**
+ * Hands the receipt's own identity to Postgres, which decides whether it may
+ * be used at all.
+ *
+ * Every check lives there: the restaurant is derived from the session, the
+ * fiscal code is compared against it, the date is bounded, and a unique index
+ * refuses a receipt that has already been split. Nothing here judges anything —
+ * this function's only job is that the values arrive from the photo rather
+ * than from the phone.
+ *
+ * Returns the refusal to be shown, or null when the receipt was accepted.
+ */
+async function attachReceipt(
+  tableId: string,
+  receipt: ParsedReceipt
+): Promise<string | null> {
+  const serviceKey = getServiceKey();
+  if (!serviceKey) {
+    console.error('No service key set; the receipt cannot be validated.');
+    return 'Receipt checking is not configured on this server.';
+  }
+
+  const issuedAt = Date.parse(receipt.issued_at);
+
+  const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
+  const { error } = await admin.rpc('attach_receipt_to_bill', {
+    p_table_id: tableId,
+    p_receipt_tax_id: receipt.merchant_tax_id ?? '',
+    p_receipt_number: receipt.receipt_number ?? '',
+    p_receipt_issued_at: Number.isNaN(issuedAt)
+      ? null
+      : new Date(issuedAt).toISOString(),
+    p_receipt_total_cents: Math.round((receipt.total ?? 0) * 100),
+  });
+
+  if (!error) return null;
+
+  console.error('attach_receipt_to_bill refused:', error.message);
+  return error.message;
+}
+
 /** Cost in millionths of a dollar — integer money, as everywhere else here. */
 function costMicros(model: string, inputTokens: number, outputTokens: number): number {
   const price = PRICE_PER_MTOK[model];
@@ -185,7 +260,15 @@ const CORS_HEADERS = {
 };
 
 type ParsedItem = { name: string; quantity: number; unit_price: number };
-type ParsedReceipt = { items: ParsedItem[]; total: number; currency: string };
+type ParsedReceipt = {
+  items: ParsedItem[];
+  total: number;
+  currency: string;
+  merchant_tax_id: string;
+  merchant_name: string;
+  receipt_number: string;
+  issued_at: string;
+};
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -367,6 +450,19 @@ Deno.serve(async (req) => {
 
     const receipt = JSON.parse(text.text) as ParsedReceipt;
     validate(receipt);
+
+    // Checked before the empty-items case below: "this receipt is from
+    // somewhere else" explains an empty result as well as a full one, and is
+    // the more useful thing to be told.
+    const refusal = await attachReceipt(tableId, receipt);
+
+    if (refusal) {
+      // Recorded as failed: the tokens were spent, and a restaurant collecting
+      // refusals is what somebody trying to bill their receipts to it looks
+      // like from the owner's side.
+      await recordScan({ ...usage, succeeded: false });
+      return json({ error: refusal }, 409);
+    }
 
     // A reply with no items is a valid answer to "what is on this receipt" —
     // it is what a photo of a laptop, or a hand, correctly produces. But it
