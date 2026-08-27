@@ -30,7 +30,11 @@ export default function WelcomeScreen() {
     );
   }
 
-  if (user) {
+  // Only a real account belongs in the restaurant's area. A customer who
+  // scanned a table code also has a session — anonymous, no email, no
+  // password — and sending them to the staff dashboard would be the wrong
+  // screen, not a leak: RLS has always scoped it to the caller's own rows.
+  if (user && !user.isGuest) {
     return <Redirect href="/dashboard" />;
   }
 

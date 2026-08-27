@@ -23,10 +23,18 @@ export default function AdminLayout() {
     router.push('/onboarding');
   }, [shouldAutoStart, claimAutoStart]);
 
-  // Admin area is signed-in only. Guests never reach it.
+  // The restaurant's area is for the restaurant's own account. Two kinds of
+  // caller are turned away here, for different reasons:
+  //
+  //   * nobody signed in at all;
+  //   * a customer on an anonymous session, opened by scanning a table code.
+  //     They are a full `auth.uid()` and everything they can reach is already
+  //     scoped to their own rows by RLS, so this is the wrong screen rather
+  //     than an open door — but it is still the wrong screen, and it carries
+  //     the staff tutorial and account deletion with it.
   if (restoring) return null;
 
-  if (!user) {
+  if (!user || user.isGuest) {
     return <Redirect href="/" />;
   }
 
