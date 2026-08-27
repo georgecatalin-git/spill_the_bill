@@ -52,10 +52,14 @@ begin
 
   select * into v_profile from public.profiles p where p.id = v_admin;
 
+  -- Named after the restaurant the code was for, and pointing at whoever can
+  -- change the answer. "This account belongs to somewhere else" is true and
+  -- leaves the person holding the phone with nothing to do about it.
   if v_profile.role <> 'owner'
      and v_profile.restaurant_id is not null
      and v_profile.restaurant_id <> v_restaurant.id then
-    raise exception 'This account belongs to another restaurant, so it opens tables only there.'
+    raise exception 'This account is not assigned to %. Ask the owner to assign it.',
+      v_restaurant.name
       using errcode = '42501';
   end if;
 
@@ -70,7 +74,7 @@ end;
 $$;
 
 comment on function public.create_table_at_venue(text, text) is
-  'Opens a table at the restaurant whose printed code was scanned. Refused for an account that already belongs to a different restaurant; the owner is exempt.';
+  'Opens a table at the restaurant whose printed code was scanned. Refused for an account assigned elsewhere, naming the restaurant it was refused for; the owner is exempt.';
 
 revoke execute on function public.create_table_at_venue(text, text) from public, anon;
 grant execute on function public.create_table_at_venue(text, text) to authenticated;

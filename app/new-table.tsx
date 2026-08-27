@@ -282,9 +282,15 @@ export default function NewTableScreen() {
                     <ThemedText style={styles.fixedRestaurant}>
                       {mine?.name} · {mine?.city}
                     </ThemedText>
+                    {/* Named after the place they tried to reach, not after the
+                        one they are stuck at. "This account belongs to Italien"
+                        is true and useless; what they need is which door was
+                        shut and who opens it. */}
                     {Boolean(scannedCode) && (
-                      <ThemedText type="secondary" style={styles.hint}>
-                        This account belongs to {mine?.name}, so it opens tables only there.
+                      <ThemedText type="secondary" style={[styles.hint, { color: warning }]}>
+                        {venue
+                          ? `This account is not assigned to ${venue.name}. Ask the owner to assign it, or open the table at ${mine?.name}.`
+                          : 'That code does not open a table here.'}
                       </ThemedText>
                     )}
                   </>
