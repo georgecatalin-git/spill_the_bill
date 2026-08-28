@@ -2,7 +2,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +28,7 @@ import { useRestaurantSearch } from '@/lib/services/use-restaurant-search';
 import { useVenueCode } from '@/lib/services/use-venue-code';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
+import { keyboardBehavior } from '@/lib/keyboard';
 
 export default function NewTableScreen() {
   // Arrives from the code printed in the restaurant: the sticker's link lands
@@ -214,7 +214,7 @@ export default function NewTableScreen() {
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={keyboardBehavior}>
         <SafeAreaView style={styles.safeArea} edges={['bottom']}>
           <ScrollView
             contentContainerStyle={styles.form}

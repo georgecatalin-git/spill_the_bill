@@ -93,7 +93,11 @@ export function ItemFormModal({
   }
 
   return (
-    <BottomSheet visible={visible} onClose={handleClose} scrollable={false}>
+    // Scrollable, and it must stay that way: this sheet has three fields, a row
+    // of people and two buttons, and with a keyboard up it is taller than the
+    // space left for it. Without scrolling, whatever is being typed can end up
+    // under the keyboard with no way to bring it back.
+    <BottomSheet visible={visible} onClose={handleClose}>
   <ThemedText type="subtitle" style={styles.title}>
         {title}
       </ThemedText>

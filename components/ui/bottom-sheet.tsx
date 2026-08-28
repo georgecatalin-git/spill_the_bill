@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,13 +11,20 @@ import Animated, { SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Motion, Radius, Spacing } from '@/constants/theme';
+import { keyboardBehavior } from '@/lib/keyboard';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type BottomSheetProps = {
   visible: boolean;
   onClose: () => void;
   children: ReactNode;
-  /** Set false for short sheets that do not need to scroll. */
+  /**
+   * Set false only for a sheet with no text input in it.
+   *
+   * Anything with a field has to be able to scroll: once the keyboard is up
+   * the panel has perhaps a third of the screen, and content that overflows a
+   * box that cannot scroll is content nobody can reach.
+   */
   scrollable?: boolean;
   /**
    * Fires once the sheet is fully off screen (iOS only).
@@ -79,6 +85,9 @@ export function BottomSheet({
       {scrollable ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
+          // The panel is short with a keyboard up, so the scroll has to be
+          // reachable rather than merely present.
+          keyboardDismissMode="interactive"
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}>
           {children}
@@ -100,9 +109,16 @@ export function BottomSheet({
         {/* Covers the entire screen, so the page behind is properly dimmed. */}
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.anchor}>
+        {/*
+          Android had no behaviour at all here, so a keyboard simply covered the
+          sheet and whatever was being typed into it. The shared constant says
+          why both platforms now need one.
+
+          Reanimated's `useAnimatedKeyboard` would have been tidier and is not
+          used on purpose: it is deprecated in Reanimated 4 over iOS bugs, and
+          on Android it takes over inset management for the entire app.
+        */}
+        <KeyboardAvoidingView behavior={keyboardBehavior} style={styles.anchor}>
           {body}
         </KeyboardAvoidingView>
       </View>

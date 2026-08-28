@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -13,6 +13,7 @@ import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useGuest } from '@/providers/guest-provider';
+import { keyboardBehavior } from '@/lib/keyboard';
 
 const MAX_NAME_LENGTH = 60;
 
@@ -66,7 +67,7 @@ export default function JoinScreen() {
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={keyboardBehavior}>
         <SafeAreaView style={styles.safeArea} edges={['bottom']}>
           <View style={styles.form}>
             <ScreenHeader

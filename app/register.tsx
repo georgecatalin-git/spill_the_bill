@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -13,6 +13,7 @@ import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { isBlank, isValidEmail } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
+import { keyboardBehavior } from '@/lib/keyboard';
 
 type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirmPassword', string>>;
 
@@ -51,7 +52,7 @@ export default function RegisterScreen() {
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={keyboardBehavior}>
         <SafeAreaView style={styles.safeArea} edges={['bottom']}>
           <ScrollView
             contentContainerStyle={styles.content}

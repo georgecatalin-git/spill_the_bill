@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +14,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { updateMyRestaurantDetails } from '@/lib/services/restaurant-service';
 import { useMyRestaurant } from '@/lib/services/use-my-restaurant';
 import { isBlank } from '@/lib/validation';
+import { keyboardBehavior } from '@/lib/keyboard';
 
 /**
  * The restaurant's own screen: how much it is being used, the code its
@@ -69,7 +70,7 @@ export default function RestaurantScreen() {
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={keyboardBehavior}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <ScrollView
             contentContainerStyle={styles.content}

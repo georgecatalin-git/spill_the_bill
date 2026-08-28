@@ -3,7 +3,6 @@ import { Redirect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -36,6 +35,7 @@ import { useAdminAccounts } from '@/lib/services/use-admin-accounts';
 import { useOwnerStats } from '@/lib/services/use-owner-stats';
 import { isBlank } from '@/lib/validation';
 import { useAuth } from '@/providers/auth-provider';
+import { keyboardBehavior } from '@/lib/keyboard';
 
 export default function OwnerScreen() {
   const { role } = useAuth();
@@ -138,7 +138,7 @@ export default function OwnerScreen() {
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={keyboardBehavior}
         keyboardVerticalOffset={tabBarHeight}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <ScrollView

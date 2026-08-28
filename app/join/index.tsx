@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,6 +10,7 @@ import { Appear } from '@/components/ui/appear';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
+import { keyboardBehavior } from '@/lib/keyboard';
 
 /**
  * Generous: codes are six characters today, but the generator takes a length
@@ -47,7 +48,7 @@ export default function JoinByCodeScreen() {
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={keyboardBehavior}>
         <SafeAreaView style={styles.safeArea} edges={['bottom']}>
           <View style={styles.form}>
             <ScreenHeader
