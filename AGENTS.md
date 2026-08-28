@@ -83,9 +83,22 @@ single rows, because each of those has to stay claimable on its own; a row that
 already counts just counts higher — five beers turning out to be fifteen is one
 row reading fifteen, never a row of five beside a row of ten.
 
-**The bill opens on the table itself.** Above the cards is a small 3D scene —
-a round top with one figure seated at it per person, facing each other across
-it — drawn with `expo-gl` and three.js from `components/bill/table-scene.tsx`.
+**The bill used to open on the table itself** — a small 3D scene above the
+cards, a round top with one figure seated at it per person, drawn with
+`expo-gl` and three.js from `components/bill/table-scene.tsx`.
+
+**It is parked, not deleted.** The file and its dependencies are still here and
+nothing imports it. Two real faults were found in it while chasing a slow app —
+a render loop that was never stopped, and three.js being evaluated at launch —
+and both are fixed in the file. It was taken off the screen anyway, for a
+reason worth keeping: the bill is the busiest screen in the app, the one where
+people tap plus and minus while figures update live over the realtime channel,
+and a continuous WebGL loop competes there of all places. Removing it also left
+one fewer variable while the slowness was still unexplained.
+
+Put it back on a calmer screen, or behind something a person turns on, rather
+than on the bill. The notes below are what it cost to get right and are worth
+reading before it goes anywhere.
 
 `expo-gl` ships inside Expo Go, which is why it was chosen: the Apple account
 that would allow a development build is still the blocker, and a dependency that

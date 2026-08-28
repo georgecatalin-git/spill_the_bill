@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -30,18 +30,6 @@ import { formatCents } from '@/lib/money';
 import type { BillItem as DbBillItem } from '@/lib/database';
 import type { BillItem, Participant } from '@/lib/types';
 import { useGuest } from '@/providers/guest-provider';
-
-/**
- * The 3D table, loaded the first time a bill is opened rather than at launch.
- *
- * Expo Router imports every route at start-up, so a plain import here dragged
- * three.js — several hundred modules — into the very first thing the app has to
- * evaluate, on a screen most sessions never reach. Deferring it costs a frame
- * the first time the bill opens and nothing after that.
- */
-const TableScene = lazy(() =>
-  import('@/components/bill/table-scene').then((module) => ({ default: module.TableScene }))
-);
 
 /** Maps a database row onto the shape the shared row components expect. */
 function toLocalItem(row: DbBillItem): BillItem {
@@ -165,15 +153,6 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
                 At this table · {bill.participants.length}
               </ThemedText>
 
-              <Suspense fallback={<View style={styles.scenePlaceholder} />}>
-              <TableScene
-                seats={bill.participants.map((person) => ({
-                  id: person.id,
-                  settled: person.settled === true,
-                  active: (bill.personTotals[person.id]?.lines.length ?? 0) > 0,
-                }))}
-              />
-              </Suspense>
 
               <View style={styles.people}>
                 {bill.participants.map((person, index) => {
@@ -452,17 +431,6 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                 At this table · {bill.participants.length}
               </ThemedText>
 
-              {/* The same thing the cards say, in a shape you can take in
-                  without reading: who is here, and who has already paid. */}
-              <Suspense fallback={<View style={styles.scenePlaceholder} />}>
-              <TableScene
-                seats={bill.participants.map((person) => ({
-                  id: person.id,
-                  settled: person.settled === true,
-                  active: (bill.personTotals[person.id]?.lines.length ?? 0) > 0,
-                }))}
-              />
-              </Suspense>
 
               <View style={styles.people}>
                 {bill.participants.map((person, index) => {
@@ -807,10 +775,6 @@ const styles = StyleSheet.create({
   },
   people: {
     gap: Spacing.sm,
-  },
-  // The scene's own height, so the page does not jump when it arrives.
-  scenePlaceholder: {
-    height: 210,
   },
   sectionLabel: {
     opacity: 0.6,
