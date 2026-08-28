@@ -175,7 +175,35 @@ sized for four puts seven shoulder to shoulder.
 old meshes are disposed as it goes: a table where somebody joins every few
 minutes would otherwise leak buffers all evening.
 
-**A guest sees the same table, read-only.** The cards and the scene are on the
+**A guest records what they had, on their own card and nowhere else.**
+`guest_add_item` takes a name, a quantity and a price — and **no participant
+id**. The person comes from the session token, as everywhere else here, so
+there is nothing a client could send to put a beer on somebody else. It creates
+the line and claims it in one step, because a line its adder does not own is
+exactly what the function exists to avoid.
+
+Three rules hold around it, all in the database rather than the screen:
+
+- **They cannot take it off the bill.** Adding is a record of something that
+  happened; voiding it is the host's, the way it is the waiter's. `bill_items`
+  has no DELETE policy for a guest at all, and `remove_item_claim` and
+  `update_item_claim` refuse to let somebody drop or zero the line they added —
+  otherwise the whole mechanism is toothless, since you could add a beer, unpick
+  it, and let it fall to whoever sorts out the remainder.
+- **Nobody else can claim it.** Without that guard a `quantity = 1` line is
+  shareable by anyone at the table, and somebody's own beer is not a platter.
+- **The host keeps every power they had.** `admin_set_participant_claim` and the
+  admin's own delete are untouched, so a mistake is fixable by the person who
+  can see the paper.
+
+`bill_items.added_by` is what carries it. Null for anything the host or the
+scanner added, which is why none of this changes the scanned-receipt path.
+
+Verified as `anon` against the live database: Alin's beer lands on Alin and not
+on George, Alin cannot remove or zero it, George cannot claim it, both can still
+share the water the host added, and the host can still void the lot.
+
+**A guest sees the same table, read-only apart from that.** The cards and the scene are on the
 guest screen too — with no Add and no Mark paid, because adding an item and
 recording a payment are the admin's and the database says so. It exposes
 nothing new: `get_guest_items_with_claims` already returns every claimant's
@@ -351,6 +379,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827220000_a_restaurant_admin_has_a_dashboard` | the restaurant sees its own figures, code and details |
 | `20260827240000_a_new_bill_can_be_read_back` | a SELECT policy must read the row's columns, not look the row up |
 | `20260828000000_a_shared_line_can_always_take_one_more` | a fully assigned bill still lets somebody join a shared line |
+| `20260828020000_a_guest_adds_what_they_had` | a guest records their own order, and cannot take it off again |
 
 Regenerate types after any schema change:
 

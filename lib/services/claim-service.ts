@@ -214,6 +214,44 @@ export async function getTipShares(sessionToken: string): Promise<TipShare[]> {
   return (data ?? []) as unknown as TipShare[];
 }
 
+/**
+ * A guest records something they had themselves.
+ *
+ * There is no participant id in this call, and that is the point: the server
+ * derives who it is from the session token, so a guest can only ever put a
+ * beer on their own share. They cannot take it off again either — the server
+ * refuses that too, because adding is a record of something that happened and
+ * voiding it is the host's call.
+ */
+export async function guestAddItem(
+  sessionToken: string,
+  name: string,
+  quantity: number,
+  unitPriceCents: number
+) {
+  const { error } = await supabase.rpc('guest_add_item', {
+    p_session_token: sessionToken,
+    p_name: name.trim(),
+    p_quantity: quantity,
+    p_unit_price_cents: unitPriceCents,
+  });
+
+  if (error) {
+    // The server's refusals are already written for a person to read.
+    if (
+      error.message.includes('name') ||
+      error.message.includes('at least one') ||
+      error.message.includes('valid price') ||
+      error.message.includes('no bill open') ||
+      error.message.includes('not been opened') ||
+      error.message.includes('completed')
+    ) {
+      throw new ClaimError(error.message);
+    }
+    throw toClaimError(error, 'Could not add that.');
+  }
+}
+
 /** Takes one more of an item. The server refuses if none are left. */
 export async function claimItem(sessionToken: string, billItemId: string, quantity = 1) {
   const { error } = await supabase.rpc('claim_item', {

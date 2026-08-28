@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       bill_items: {
         Row: {
+          added_by: string | null
           bill_id: string
           created_at: string
           id: string
@@ -26,6 +27,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          added_by?: string | null
           bill_id: string
           created_at?: string
           id?: string
@@ -36,6 +38,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          added_by?: string | null
           bill_id?: string
           created_at?: string
           id?: string
@@ -46,6 +49,55 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "bill_claim_details"
+            referencedColumns: ["participant_id"]
+          },
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "bill_even_shares"
+            referencedColumns: ["participant_id"]
+          },
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "bill_participant_totals"
+            referencedColumns: ["participant_id"]
+          },
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "bill_tip_shares"
+            referencedColumns: ["participant_id"]
+          },
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "participant_totals"
+            referencedColumns: ["participant_id"]
+          },
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "table_participants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bill_items_bill_id_fkey"
             columns: ["bill_id"]
@@ -1126,6 +1178,20 @@ export type Database = {
           participant_id: string
           participant_name: string
           total_cents: number
+        }[]
+      }
+      guest_add_item: {
+        Args: {
+          p_name: string
+          p_quantity?: number
+          p_session_token: string
+          p_unit_price_cents?: number
+        }
+        Returns: {
+          item_id: string
+          item_name: string
+          quantity: number
+          unit_price_cents: number
         }[]
       }
       is_bill_admin: { Args: { p_bill_id: string }; Returns: boolean }

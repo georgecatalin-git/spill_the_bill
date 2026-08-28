@@ -73,6 +73,7 @@ export default function BillScreen() {
 /** The shared receipt, as a guest sees it. Every figure comes from the server. */
 function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
   const bill = useGuestBill(sessionToken);
+  const [addingMine, setAddingMine] = useState(false);
   const border = useThemeColor({}, 'border');
   const warning = useThemeColor({}, 'warning');
 
@@ -168,8 +169,13 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
                       tipCents={totals?.tipCents ?? 0}
                       lines={totals?.lines ?? []}
                       currency={currency}
-                      canEdit={false}
-                      onAdd={() => {}}
+                      // A guest adds to their own card and nothing else. The
+                      // server enforces it — this only stops offering a button
+                      // that would be refused.
+                      canAdd={person.id === bill.myParticipantId && !locked}
+                      canStep={false}
+                      canSettle={false}
+                      onAdd={() => setAddingMine(true)}
                       onAddOneMore={() => {}}
                       onRemoveOne={() => {}}
                       onToggleSettled={() => {}}
@@ -276,6 +282,20 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
           <Button label="Refresh" variant="secondary" onPress={bill.reload} />
         </ScrollView>
       </SafeAreaView>
+
+      {/* No person picker on it, unlike the host's. There is nobody to choose:
+          the server takes the person from the session token, so this can only
+          land on the guest doing the tapping. */}
+      <ItemFormModal
+        visible={addingMine}
+        title="Add what you had"
+        submitLabel="Add to my share"
+        onSubmit={async (name, unitPriceCents, quantity) => {
+          setAddingMine(false);
+          await bill.addItem(name, unitPriceCents, quantity);
+        }}
+        onClose={() => setAddingMine(false)}
+      />
     </ThemedView>
   );
 }
@@ -432,7 +452,9 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                       tipCents={totals?.tipCents ?? 0}
                       lines={totals?.lines ?? []}
                       currency={currency}
-                      canEdit={!completed}
+                      canAdd={!completed}
+                      canStep={!completed}
+                      canSettle={!completed}
                       busy={settling === person.id}
                       pendingItemId={pendingItemId}
                       onAdd={() => setAddingFor(person)}

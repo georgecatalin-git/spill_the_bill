@@ -45,8 +45,16 @@ type PersonCardProps = {
   /** What they have ordered so far. Empty on an evenly split bill. */
   lines: PersonLine[];
   currency?: string;
-  /** False once the bill is closed — a settled bill is a record, not a form. */
-  canEdit: boolean;
+  /**
+   * Three separate permissions, because they are three different people's.
+   *
+   * A guest may add to their own card and nothing else: not to somebody else's,
+   * not the steppers, not the payment. The host may do all three, until the
+   * bill is closed — a settled bill is a record, not a form.
+   */
+  canAdd: boolean;
+  canStep: boolean;
+  canSettle: boolean;
   busy?: boolean;
   /** Which line is mid-write, so its buttons stop taking taps. */
   pendingItemId?: string | null;
@@ -63,7 +71,9 @@ export function PersonCard({
   tipCents,
   lines,
   currency,
-  canEdit,
+  canAdd,
+  canStep,
+  canSettle,
   busy,
   pendingItemId,
   onAdd,
@@ -122,7 +132,7 @@ export function PersonCard({
                 {formatCents(line.amountCents, currency)}
               </ThemedText>
 
-              {canEdit && (
+              {canStep && (
                 <View style={styles.steppers}>
                   {/* Always offered, unlike the "+": taking somebody off a line
                       never needs it widened, so even a shared platter can be
@@ -169,20 +179,23 @@ export function PersonCard({
         </View>
       )}
 
-      {canEdit && (
+      {(canAdd || canSettle) && (
         <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Add an item for ${person.name}`}
-            onPress={onAdd}
-            style={({ pressed }) => [
-              styles.action,
-              { borderColor: border },
-              pressed && styles.pressed,
-            ]}>
-            <ThemedText style={styles.actionLabel}>Add item</ThemedText>
-          </Pressable>
+          {canAdd && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add an item for ${person.name}`}
+              onPress={onAdd}
+              style={({ pressed }) => [
+                styles.action,
+                { borderColor: border },
+                pressed && styles.pressed,
+              ]}>
+              <ThemedText style={styles.actionLabel}>Add item</ThemedText>
+            </Pressable>
+          )}
 
+          {canSettle && (
           <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: settled }}
@@ -207,6 +220,7 @@ export function PersonCard({
               </ThemedText>
             )}
           </Pressable>
+          )}
         </View>
       )}
     </View>

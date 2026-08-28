@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import {
   claimItem,
+  guestAddItem,
   getBillAssignmentSummary,
   getGuestClaims,
   getGuestEvenShares,
@@ -243,6 +244,16 @@ export function useGuestBill(sessionToken: string | undefined) {
     return totalsByPerson;
   }, [view.participants, items, tipShares, evenShares]);
 
+  /**
+   * Records something this guest had. It can only land on them: the server
+   * takes the person from the session token and this call carries no other id.
+   */
+  const addItem = useCallback(
+    (name: string, unitPriceCents: number, quantity: number) =>
+      mutate(() => guestAddItem(sessionToken as string, name, quantity, unitPriceCents)),
+    [mutate, sessionToken]
+  );
+
   const me = totals.find((total) => total.is_me);
   const myTip = tipShares.find((share) => share.is_me);
   const myTipCents = myTip?.tip_share_cents ?? 0;
@@ -271,6 +282,7 @@ export function useGuestBill(sessionToken: string | undefined) {
     personTotals,
     ...view,
     reload: () => load(),
+    addItem,
     claim,
     release,
     clearError: () => setError(null),
