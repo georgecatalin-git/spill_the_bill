@@ -66,7 +66,9 @@ const SHOULDER = TABLE_TOP + 0.14;
  * real one does.
  */
 function seatRadius(count: number) {
-  return 1.95 + Math.max(0, count - 4) * 0.14;
+  // Close enough that the hands land on the tabletop rather than short of it,
+  // which is what makes them look seated *at* the table.
+  return 1.78 + Math.max(0, count - 4) * 0.14;
 }
 
 /** Everything the scene draws sits inside this sphere, centred on the table. */
@@ -83,7 +85,7 @@ function sceneRadius(count: number) {
 const FOV = 50;
 
 /** What somebody is doing with their hands and head at this moment. */
-type Gesture = 'none' | 'nod' | 'shake' | 'shrug' | 'point';
+type Gesture = 'none' | 'nod' | 'shake' | 'shrug' | 'point' | 'laugh' | 'sip';
 
 type Actor = {
   group: THREE.Group;
@@ -104,6 +106,8 @@ type Actor = {
   gestureFrom: number;
   gestureUntil: number;
   nextGesture: number;
+  /** Eased 0..1 while this person is leaning in on the table with a neighbour. */
+  huddle: number;
 };
 
 /**
@@ -230,10 +234,17 @@ function buildActor(seat: SceneSeat, index: number, count: number, chairColour: 
   group.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
 
   // Facing the middle is what puts them opposite one another, whatever the
-  // headcount turns out to be — and the target is level with them, not at the
-  // tabletop. Aiming at the tabletop tips every figure 23 degrees onto its
-  // back, because `lookAt` turns the whole body towards a point above it.
-  group.lookAt(0, 0, 0);
+  // headcount turns out to be. Set directly rather than with `lookAt`, and that
+  // is not a style choice.
+  //
+  // `Object3D.lookAt` swaps its arguments for anything that is not a camera or
+  // a light, so a plain object ends up with **+Z** aimed at the target, not -Z.
+  // Every figure was therefore turned a full half-circle: the chair back sat
+  // between its occupant and the table, the nose pointed out into the room, and
+  // the arms reached backwards over the chair. `rotation.y = angle` puts local
+  // -Z on the centre, which is the convention the rest of this file is built
+  // on — and it is worth stating rather than deriving twice.
+  group.rotation.y = angle;
 
   return {
     group,
@@ -250,6 +261,7 @@ function buildActor(seat: SceneSeat, index: number, count: number, chairColour: 
     gestureFrom: 0,
     gestureUntil: 0,
     nextGesture: 2 + Math.random() * 6,
+    huddle: 0,
   };
 }
 
@@ -322,6 +334,11 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
     let speaker = 0;
     let speakerUntil = 0;
 
+    /** Two neighbours leaning in on the table, having their own conversation. */
+    let pair: [number, number] | null = null;
+    let pairUntil = 0;
+    let nextPair = 5 + Math.random() * 7;
+
     function rebuild() {
       // Meshes hold GPU buffers, which outlive the object graph unless they are
       // told otherwise. A table where somebody joins every few minutes would
@@ -342,6 +359,9 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
 
       speaker = 0;
       speakerUntil = 0;
+      pair = null;
+      pairUntil = 0;
+      nextPair = 5 + Math.random() * 7;
     }
 
     rebuildRef.current = rebuild;
@@ -376,6 +396,29 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
       });
     }
 
+    /**
+     * Two people dropping out of the main conversation to lean in on the table
+     * and talk to each other.
+     *
+     * Neighbours, not anybody: two people at opposite ends of a table do not
+     * lean towards each other, they raise their voices. Needs three at the
+     * table before it makes sense — with two, a pair leaning in is not a side
+     * conversation, it is the conversation.
+     */
+    function directPair(t: number) {
+      if (pair && t > pairUntil) {
+        pair = null;
+        nextPair = t + 7 + Math.random() * 9;
+        return;
+      }
+
+      if (pair || t < nextPair || actors.length < 3) return;
+
+      const first = Math.floor(Math.random() * actors.length);
+      pair = [first, (first + 1) % actors.length];
+      pairUntil = t + 5 + Math.random() * 4;
+    }
+
     function scheduleGestures(t: number) {
       for (let i = 0; i < actors.length; i++) {
         const actor = actors[i];
@@ -384,21 +427,32 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
         const listening = i !== speaker;
         const roll = Math.random();
 
-        // Listeners mostly agree, sometimes disagree, sometimes shrug. Somebody
-        // holding the floor points and shrugs instead — nodding along to
-        // yourself reads as a glitch.
+        // Listeners mostly agree, sometimes disagree, sometimes shrug, and
+        // now and then laugh or reach for a drink. Somebody holding the floor
+        // points and shrugs instead — nodding along to yourself reads as a
+        // glitch — but they laugh and drink like everybody else.
         actor.gesture = listening
-          ? roll < 0.55
+          ? roll < 0.38
             ? 'nod'
-            : roll < 0.8
+            : roll < 0.52
               ? 'shake'
-              : 'shrug'
-          : roll < 0.6
+              : roll < 0.64
+                ? 'shrug'
+                : roll < 0.82
+                  ? 'laugh'
+                  : 'sip'
+          : roll < 0.44
             ? 'point'
-            : 'shrug';
+            : roll < 0.66
+              ? 'shrug'
+              : roll < 0.84
+                ? 'laugh'
+                : 'sip';
 
         actor.gestureFrom = t;
-        actor.gestureUntil = t + (actor.gesture === 'shrug' ? 1.4 : 1.1);
+        // A drink takes longer than a nod, and a shrug is held.
+        const span = actor.gesture === 'sip' ? 2.2 : actor.gesture === 'shrug' ? 1.4 : 1.1;
+        actor.gestureUntil = t + span;
         actor.nextGesture = actor.gestureUntil + 1.5 + Math.random() * 5;
       }
     }
@@ -454,12 +508,24 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
       camera.lookAt(0, SCENE_CENTRE_Y, 0);
 
       direct(t);
+      directPair(t);
       scheduleGestures(t);
 
       const ring = seatRadius(actors.length);
 
       actors.forEach((actor, index) => {
         const talking = index === speaker && actors.length > 1;
+
+        // A pair leaning in on the table beats the main conversation: somebody
+        // who has turned to their neighbour is not listening to the floor any
+        // more, and having them keep facing the speaker was the giveaway.
+        const inPair = pair !== null && (index === pair[0] || index === pair[1]);
+        if (inPair && pair) actor.lookingAt = pair[0] === index ? pair[1] : pair[0];
+
+        // Eased in and out over about half a second, so the two of them settle
+        // onto the table rather than snapping down onto it.
+        actor.huddle += ((inPair ? 1 : 0) - actor.huddle) * 0.035;
+
         const target = actors[actor.lookingAt] ?? actor;
 
         // Eased rather than snapped: a head that arrives instantly reads as a
@@ -477,21 +543,35 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
         const nod = gesture === 'nod' ? Math.sin(progress * Math.PI * 6) * 0.3 * strength : 0;
         const shake = gesture === 'shake' ? Math.sin(progress * Math.PI * 7) * 0.42 * strength : 0;
 
+        // Laughing throws the head back and shakes the shoulders. The shake is
+        // the half that sells it — a head tipped back on its own is somebody
+        // looking at the ceiling.
+        const laugh = gesture === 'laugh' ? strength : 0;
+        const quiver = laugh * Math.sin(t * 19 + actor.phase) * 0.09;
+
+        // Drinking brings the head down to meet the hand as much as the hand up
+        // to the head: these arms are short, and the two halves meeting in the
+        // middle is what reads as a sip.
+        const sip = gesture === 'sip' ? strength : 0;
+
         // Talking moves a head constantly and slightly; listening barely at all.
         const chatter = talking ? Math.sin(t * 6.5 + actor.phase) * 0.05 : 0;
 
         actor.head.rotation.y = actor.yaw * 0.68 + shake;
-        actor.head.rotation.x = nod + chatter + (talking ? 0.04 : 0);
+        actor.head.rotation.x =
+          nod + chatter + (talking ? 0.04 : 0) + laugh * 0.32 + quiver * 0.4 - sip * 0.24;
 
         // The shoulders follow the head part of the way. Nobody turns their head
         // ninety degrees and leaves their chest where it was.
-        const lean = actor.seat.settled ? -0.06 : actor.seat.active ? 0.08 : 0.03;
+        const base = actor.seat.settled ? -0.06 : actor.seat.active ? 0.08 : 0.03;
+        const lean = base + actor.huddle * 0.24 - laugh * 0.1;
         actor.body.rotation.y = actor.yaw * 0.32;
         actor.body.rotation.x = lean + Math.sin(t * 1.1 + actor.phase) * 0.012;
 
         // Breathing, out of step with everybody else — a table bobbing together
         // reads as a machine, not as people.
-        actor.group.position.y = Math.sin(t * 1.5 + actor.phase) * 0.02;
+        actor.group.position.y =
+          Math.sin(t * 1.5 + actor.phase) * 0.02 + quiver * 0.12 - actor.huddle * 0.015;
 
         actor.shoulders.forEach((shoulder, side) => {
           const sign = side === 0 ? -1 : 1;
@@ -530,6 +610,24 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
             spread = THREE.MathUtils.lerp(spread, sign * 0.08, strength);
             bend = THREE.MathUtils.lerp(bend, 0.25, strength);
           }
+
+          if (sip > 0 && side === 1) {
+            // One hand folded up towards the mouth, elbow tucked in.
+            pitch = THREE.MathUtils.lerp(pitch, 0.15, sip);
+            spread = THREE.MathUtils.lerp(spread, sign * 0.06, sip);
+            bend = THREE.MathUtils.lerp(bend, 2.7, sip);
+          }
+
+          // Shoulders shaking with a laugh, on top of whatever the arms were
+          // already doing.
+          pitch += quiver;
+
+          // Leaning in puts both forearms flat on the table and the elbows
+          // close together, which is the shape of two people talking across a
+          // table rather than at one.
+          pitch = THREE.MathUtils.lerp(pitch, 0.62, actor.huddle);
+          spread = THREE.MathUtils.lerp(spread, sign * 0.07, actor.huddle);
+          bend = THREE.MathUtils.lerp(bend, 1.5, actor.huddle);
 
           shoulder.rotation.x = pitch;
           shoulder.rotation.z = spread;

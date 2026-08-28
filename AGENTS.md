@@ -105,10 +105,26 @@ room of people talking to nobody.
 
 On top of it: listeners mostly nod, sometimes shake their head, sometimes
 shrug; the speaker points and shrugs, because nodding along to yourself reads as
-a glitch. Every gesture fades in and out over about a second rather than
-switching on, and nobody is ever quite still — listeners held at exactly the
-same angle read as furniture, and one person moving at a table of statues looks
-worse than nobody moving at all.
+a glitch. Everybody laughs and reaches for a drink. Every gesture fades in and
+out over about a second rather than switching on, and nobody is ever quite still
+— listeners held at exactly the same angle read as furniture, and one person
+moving at a table of statues looks worse than nobody moving at all.
+
+**Two of them peel off and lean in on the table.** A pair of *neighbours*, every
+ten seconds or so, turning to each other with their forearms flat on the table
+for a few seconds. Neighbours rather than anybody: two people at opposite ends
+of a table do not lean towards each other, they raise their voices. It needs
+three at the table before it means anything — with two, a pair leaning in is not
+a side conversation, it is the conversation. While it lasts it overrides the
+main one for those two, because somebody who has turned to their neighbour is
+not listening to the floor any more, and leaving them facing the speaker was the
+giveaway.
+
+Two of the gestures are worth their arithmetic. A **laugh** is a head thrown
+back *and* the shoulders shaking; the head alone is somebody looking at the
+ceiling. A **sip** brings the head down to meet the hand as much as the hand up
+to the mouth — these arms are two short segments, and the two halves meeting in
+the middle is what reads as drinking.
 
 **Arms have an elbow.** A rigid arm swinging from the shoulder reads as a
 scarecrow whatever it is doing, and none of the shapes people actually make —
@@ -133,8 +149,15 @@ again:
   `gl.viewport` stayed `[0, 0, 1, 376]` forever. The scene rendered perfectly
   into a strip three pixels wide. Read the size every frame; that also covers
   rotation.
-- **`lookAt` turns a whole body.** Aiming a seated figure at the tabletop tips
-  it 23 degrees onto its back, because the target is above it. Aim level.
+- **`Object3D.lookAt` does not do what a camera's does.** For anything that is
+  not a camera or a light it swaps its arguments, so **+Z** ends up aimed at the
+  target rather than -Z. Every figure was turned a full half-circle by it: the
+  chair back sat between its occupant and the table, the nose pointed out into
+  the room, and the arms reached backwards over the chair. The seats are set
+  with `rotation.y = angle` instead, which puts local -Z on the centre — the
+  convention the rest of the file is written against. (Aiming `lookAt` at the
+  tabletop was wrong for a second reason too: the target is above the figure, so
+  it tipped each one 23 degrees onto its back.)
 - **Lean the body, not the figure.** `lookAt` has already turned the outer
   group, so its x axis runs along the table's edge; setting `rotation.x` there
   tips somebody sitting at the side over sideways. The meshes hang in an inner
