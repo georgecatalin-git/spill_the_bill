@@ -7,10 +7,9 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import Animated, { SlideInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Motion, Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { keyboardBehavior } from '@/lib/keyboard';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
@@ -46,12 +45,13 @@ type BottomSheetProps = {
  *    all the way down past the home indicator, so nothing of the page shows
  *    underneath it.
  *
- * The backdrop fades and the panel springs up separately, which is why the
- * Modal's own animation is set to `fade` and the movement is done here: with
- * `slide`, the dimming slides up with the panel and the page appears to be
- * pushed rather than covered. Leaving is still the Modal's own fade — an exit
- * animation would mean keeping it mounted after `visible` goes false, and a
- * sheet that lingers is a worse bug than a sheet that leaves plainly.
+ * The entrance is the platform's own `slide`, and that is a correction rather
+ * than a default. A hand-written spring on the panel looked slightly better and
+ * broke the keyboard: the first field carries `autoFocus`, so the keyboard
+ * comes up while the panel is still moving, and `KeyboardAvoidingView` measures
+ * a panel that has not settled — leaving the field being typed into sitting
+ * under the keyboard. On a sheet full of inputs the entrance is not decoration;
+ * it decides where everything ends up.
  */
 export function BottomSheet({
   visible,
@@ -67,11 +67,7 @@ export function BottomSheet({
   const borderStrong = useThemeColor({}, 'borderStrong');
 
   const body = (
-    <Animated.View
-      entering={SlideInDown.duration(Motion.base)
-        .springify()
-        .damping(Motion.springSoft.damping)
-        .stiffness(Motion.springSoft.stiffness)}
+    <View
       style={[
         styles.panel,
         { backgroundColor: background, borderColor: border, paddingBottom: insets.bottom },
@@ -95,14 +91,14 @@ export function BottomSheet({
       ) : (
         <View style={styles.content}>{children}</View>
       )}
-    </Animated.View>
+    </View>
   );
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onClose}
       onDismiss={onDismiss}>
       <View style={[styles.overlay, { backgroundColor: overlay }]}>

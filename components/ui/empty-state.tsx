@@ -26,15 +26,13 @@ type EmptyStateProps = {
 export function EmptyState({ message, hint, icon, action }: EmptyStateProps) {
   const border = useThemeColor({}, 'border');
   const surface = useThemeColor({}, 'surface');
-  const textSecondary = useThemeColor({}, 'textSecondary');
 
   return (
     <Appear style={[styles.container, { borderColor: border, backgroundColor: surface }]}>
-      {icon && (
-        <View style={[styles.badge, { backgroundColor: border }]}>
-          <ThemedText style={[styles.icon, { color: textSecondary }]}>{icon}</ThemedText>
-        </View>
-      )}
+      {/* The glyph on its own, larger and dimmed. In a filled circle it read as
+          a smudge: a 22pt emoji inside a 48pt disc of border colour is mostly
+          disc, and in the dark theme the disc is nearly the page. */}
+      {icon && <ThemedText style={styles.icon}>{icon}</ThemedText>}
 
       <ThemedText style={styles.message}>{message}</ThemedText>
 
@@ -59,17 +57,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.xs,
   },
-  badge: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
-  },
   icon: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 30,
+    lineHeight: 36,
+    marginBottom: Spacing.xs,
+    opacity: 0.75,
   },
   message: {
     ...Type.heading,
