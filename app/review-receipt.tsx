@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Appear } from '@/components/ui/appear';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Radius, Spacing } from '@/constants/theme';
 
@@ -17,9 +18,9 @@ export default function ReviewReceiptScreen() {
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <ScreenHeader title="Review Receipt" subtitle="Make sure the whole receipt is readable." />
 
-        <View style={styles.preview}>
+        <Appear index={1} style={styles.preview}>
           <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
-        </View>
+        </Appear>
 
         <View style={styles.actions}>
           <Button

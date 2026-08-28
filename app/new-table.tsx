@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
+import { Appear } from '@/components/ui/appear';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -225,6 +226,7 @@ export default function NewTableScreen() {
             />
 
             {needsName && (
+              <Appear index={1}>
               <FormField
                 label="Your name"
                 value={hostName}
@@ -236,6 +238,7 @@ export default function NewTableScreen() {
                 autoCapitalize="words"
                 error={hostNameError}
               />
+              </Appear>
             )}
 
             <FormField

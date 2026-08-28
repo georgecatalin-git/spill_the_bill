@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Appear } from '@/components/ui/appear';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
@@ -54,7 +55,7 @@ export default function JoinByCodeScreen() {
               subtitle="Enter the code from your invitation."
             />
 
-            <View style={styles.field}>
+            <Appear index={1} style={styles.field}>
               <ThemedText type="label" style={styles.fieldLabel}>
                 Table code
               </ThemedText>
@@ -74,7 +75,7 @@ export default function JoinByCodeScreen() {
                 Whoever created the table can read it out — it is shown on their
                 invitation screen.
               </ThemedText>
-            </View>
+            </Appear>
           </View>
 
           <Button label="Continue" disabled={!canContinue} onPress={handleContinue} />
