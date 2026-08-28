@@ -15,6 +15,7 @@ import { AccountRow } from '@/components/admin/account-row';
 import { RestaurantRow } from '@/components/admin/restaurant-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Appear } from '@/components/ui/appear';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { FormField } from '@/components/ui/form-field';
@@ -214,9 +215,9 @@ export default function OwnerScreen() {
                 </Card>
               )}
 
-              {stats.map((stat) => (
+              {stats.map((stat, index) => (
+                <Appear key={stat.restaurant_id} index={index}>
                 <RestaurantRow
-                  key={stat.restaurant_id}
                   stat={stat}
                   mergeTargets={stats.filter((row) => row.restaurant_id !== stat.restaurant_id)}
                   accounts={accounts}
@@ -254,6 +255,7 @@ export default function OwnerScreen() {
                     })
                   }
                 />
+                </Appear>
               ))}
             </View>
 
@@ -267,14 +269,15 @@ export default function OwnerScreen() {
                   <ThemedText type="secondary">No accounts yet.</ThemedText>
                 </Card>
               ) : (
-                accounts.map((account) => (
-                  <AccountRow
-                    key={account.admin_id}
-                    account={account}
-                    onDelete={() =>
-                      runOn(account.admin_id, () => deleteAdminAccount(account.admin_id))
-                    }
-                  />
+                accounts.map((account, index) => (
+                  <Appear key={account.admin_id} index={index}>
+                    <AccountRow
+                      account={account}
+                      onDelete={() =>
+                        runOn(account.admin_id, () => deleteAdminAccount(account.admin_id))
+                      }
+                    />
+                  </Appear>
                 ))
               )}
             </View>

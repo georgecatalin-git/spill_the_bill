@@ -6,7 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Appear } from '@/components/ui/appear';
 import { Card } from '@/components/ui/card';
+import { SuccessCheck } from '@/components/ui/success-check';
 import { Spacing } from '@/constants/theme';
 import { useRealtimeTable } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -84,16 +86,24 @@ export default function JoinedScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <View style={styles.body}>
-          <View style={styles.headline}>
+          <Appear style={styles.headline} lift={14}>
+            {/* Drawn rather than shown, once, with the success haptic: this is
+                the moment somebody finds out they are actually at the table,
+                and it is the only place in the guest flow worth a flourish. */}
+            <View style={styles.mark}>
+              <SuccessCheck size={56} />
+            </View>
+
             <ThemedText type="title" style={styles.title}>
               {ready ? 'Your bill is ready' : "You're in!"}
             </ThemedText>
-            <ThemedText type="secondary">
+            <ThemedText type="secondary" style={styles.lead}>
               {ready ? 'The receipt is shared with the table.' : `You're now part of ${tableName}.`}
             </ThemedText>
-          </View>
+          </Appear>
 
-          <Card style={styles.card}>
+          <Appear index={1}>
+          <Card depth={2} style={styles.card}>
             <View style={styles.row}>
               <ThemedText type="secondary">People at the table</ThemedText>
               <ThemedText style={styles.count}>{loading ? '—' : people}</ThemedText>
@@ -106,6 +116,7 @@ export default function JoinedScreen() {
               </ThemedText>
             </View>
           </Card>
+          </Appear>
 
           {error && (
             <ThemedText type="secondary" style={{ color: warning }}>
@@ -142,12 +153,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.xl,
   },
+  mark: {
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  lead: {
+    textAlign: 'center',
+  },
   headline: {
     gap: Spacing.sm,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 34,
-    lineHeight: 44,
+    fontSize: 32,
+    lineHeight: 40,
+    textAlign: 'center',
   },
   card: {
     gap: Spacing.md,
