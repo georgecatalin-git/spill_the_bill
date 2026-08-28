@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Appear } from '@/components/ui/appear';
 import { Card } from '@/components/ui/card';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
@@ -61,7 +62,8 @@ export default function ProfileScreen() {
           showsVerticalScrollIndicator={false}>
           <ScreenHeader title="Profile" />
 
-          <Card style={styles.card}>
+          <Appear index={1}>
+          <Card depth={2} style={styles.card}>
             <View style={styles.identity}>
               <Avatar name={user?.name ?? ''} size={56} />
               <ThemedText style={styles.name}>{user?.name}</ThemedText>
@@ -77,8 +79,9 @@ export default function ProfileScreen() {
               <ThemedText>{user?.email}</ThemedText>
             </View>
           </Card>
+          </Appear>
 
-          <View style={styles.section}>
+          <Appear index={2} style={styles.section}>
             <ThemedText type="label" style={styles.sectionLabel}>
               Tutorial
             </ThemedText>
@@ -96,9 +99,9 @@ export default function ProfileScreen() {
                 <Ionicons name="chevron-forward" size={18} color={textSecondary} />
               </Pressable>
             </Card>
-          </View>
+          </Appear>
 
-          <View style={styles.section}>
+          <Appear index={3} style={styles.section}>
             <ThemedText type="label" style={styles.sectionLabel}>
               Account
             </ThemedText>
@@ -126,7 +129,7 @@ export default function ProfileScreen() {
                 {deleteError}
               </ThemedText>
             )}
-          </View>
+          </Appear>
         </ScrollView>
 
         <View style={styles.footer}>

@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { FormField } from '@/components/ui/form-field';
+import { Appear } from '@/components/ui/appear';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -88,7 +89,10 @@ export default function RestaurantScreen() {
 
             {restaurant && (
               <>
-                <Card style={styles.figures}>
+                {/* The figures are what a restaurant opens this screen for, so
+                    they arrive first and sit above everything else. */}
+                <Appear index={1}>
+                <Card depth={2} style={styles.figures}>
                   <View style={styles.figure}>
                     <ThemedText style={styles.number}>{restaurant.splits_active}</ThemedText>
                     <ThemedText type="secondary" style={styles.label}>
@@ -114,6 +118,7 @@ export default function RestaurantScreen() {
                     </ThemedText>
                   </View>
                 </Card>
+                </Appear>
 
                 {/* Only ACTIVE serves customers, and the code is dead until it
                     is — worth saying here rather than leaving somebody to
@@ -127,7 +132,7 @@ export default function RestaurantScreen() {
                   </Card>
                 )}
 
-                <View style={styles.section}>
+                <Appear index={2} style={styles.section}>
                   <ThemedText type="label" style={styles.sectionLabel}>
                     Your Split code
                   </ThemedText>
@@ -144,9 +149,9 @@ export default function RestaurantScreen() {
                       somewhere it should not.
                     </ThemedText>
                   </Card>
-                </View>
+                </Appear>
 
-                <View style={styles.section}>
+                <Appear index={3} style={styles.section}>
                   <ThemedText type="label" style={styles.sectionLabel}>
                     Details
                   </ThemedText>
@@ -204,7 +209,7 @@ export default function RestaurantScreen() {
                       <Button label="Edit name and address" variant="secondary" onPress={startEditing} />
                     </Card>
                   )}
-                </View>
+                </Appear>
               </>
             )}
           </ScrollView>

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Appear } from '@/components/ui/appear';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
@@ -70,7 +71,7 @@ export default function LoginScreen() {
             showsVerticalScrollIndicator={false}>
             <ScreenHeader title="Log In" subtitle="Welcome back." />
 
-            <View style={styles.form}>
+            <Appear index={1} style={styles.form}>
               <FormField
                 label="Email"
                 value={email}
@@ -90,7 +91,7 @@ export default function LoginScreen() {
                 onSubmitEditing={handleSubmit}
                 error={errors.password}
               />
-            </View>
+            </Appear>
 
             {error && (
               <ThemedText type="secondary" style={{ color: warning }}>

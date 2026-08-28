@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
+import { Appear } from '@/components/ui/appear';
 import { Card } from '@/components/ui/card';
 import { ConnectionIndicator } from '@/components/ui/connection-status';
 import { ScreenHeader } from '@/components/ui/screen-header';
@@ -141,7 +142,10 @@ export default function TableScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <ScreenHeader title={tableName} subtitle={restaurantName} />
 
-          <Card style={styles.inviteCard}>
+          {/* The invitation is what this screen is for, so it is the one
+              raised above the rest. */}
+          <Appear index={1}>
+          <Card depth={2} style={styles.inviteCard}>
             <View style={styles.inviteCopy}>
               <ThemedText type="subtitle" style={styles.inviteTitle}>
                 Bring the table in
@@ -152,6 +156,7 @@ export default function TableScreen() {
             </View>
             <Button label="Invite People" onPress={() => setInvitationVisible(true)} />
           </Card>
+          </Appear>
 
           {/*
             Not everyone at a table installs an app, and until now anyone who
@@ -159,6 +164,7 @@ export default function TableScreen() {
             whoever did join. Added by name, they get a share like anybody
             else; the host records what they ordered on the bill screen.
           */}
+          <Appear index={2}>
           <Card style={styles.addCard}>
             <ThemedText type="secondary">
               Somebody without the app? Add them by name and put their orders on
@@ -180,8 +186,9 @@ export default function TableScreen() {
               disabled={addingPerson || isBlank(newName)}
             />
           </Card>
+          </Appear>
 
-          <View style={styles.section}>
+          <Appear index={3} style={styles.section}>
             <View style={styles.sectionHeader}>
               <ThemedText type="label" style={styles.sectionLabel}>
                 People at the table{participants.length > 0 ? ` · ${participants.length}` : ''}
@@ -195,7 +202,7 @@ export default function TableScreen() {
                 {error}
               </ThemedText>
             )}
-          </View>
+          </Appear>
 
           <Button label="Open Bill" onPress={handleStartBill} />
         </ScrollView>

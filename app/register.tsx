@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Appear } from '@/components/ui/appear';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
 import { ScreenHeader } from '@/components/ui/screen-header';
@@ -58,7 +59,7 @@ export default function RegisterScreen() {
             showsVerticalScrollIndicator={false}>
             <ScreenHeader title="Create Account" subtitle="Start splitting bills with friends." />
 
-            <View style={styles.form}>
+            <Appear index={1} style={styles.form}>
               <FormField
                 label="Full Name"
                 value={name}
@@ -93,7 +94,7 @@ export default function RegisterScreen() {
                 secureTextEntry
                 error={errors.confirmPassword}
               />
-            </View>
+            </Appear>
 
             {error && (
               <ThemedText type="secondary" style={{ color: warning }}>
