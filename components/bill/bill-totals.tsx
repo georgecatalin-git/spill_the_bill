@@ -1,9 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { AnimatedMoney } from '@/components/ui/animated-money';
 import { Radius, Spacing } from '@/constants/theme';
+import { useElevation } from '@/hooks/use-elevation';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { formatCents } from '@/lib/money';
 
 type BillTotalsProps = {
   totalCents: number;
@@ -49,14 +50,15 @@ export function BillTotals({
   const warning = useThemeColor({}, 'warning');
 
   const settled = remainingCents === 0;
+  const depth = useElevation(1);
 
   return (
-    <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+    <View style={[styles.card, { backgroundColor: surface, borderColor: border }, depth]}>
       <View style={styles.headline}>
         <ThemedText type="label" style={styles.label}>
           Bill Total
         </ThemedText>
-        <ThemedText style={styles.total}>{formatCents(totalCents, currency)}</ThemedText>
+        <AnimatedMoney cents={totalCents} currency={currency} style={styles.total} />
       </View>
 
       <View style={[styles.split, { borderTopColor: border }]}>
@@ -64,18 +66,20 @@ export function BillTotals({
           <ThemedText type="secondary" style={styles.columnLabel}>
             Assigned
           </ThemedText>
-          <ThemedText style={styles.columnValue}>
-            {formatCents(assignedCents, currency)}
-          </ThemedText>
+          <AnimatedMoney cents={assignedCents} currency={currency} style={styles.columnValue} />
         </View>
 
         <View style={[styles.column, styles.columnRight]}>
           <ThemedText type="secondary" style={styles.columnLabel}>
             {remainingLabel(remainingCents, tipCents, fullyAssigned)}
           </ThemedText>
-          <ThemedText style={[styles.columnValue, { color: settled ? success : warning }]}>
-            {formatCents(remainingCents, currency)}
-          </ThemedText>
+          {/* Green once nothing is outstanding — the one place on this card
+              where colour is carrying meaning rather than decoration. */}
+          <AnimatedMoney
+            cents={remainingCents}
+            currency={currency}
+            style={[styles.columnValue, { color: settled ? success : warning }]}
+          />
         </View>
       </View>
     </View>
@@ -96,10 +100,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   total: {
-    fontSize: 32,
-    lineHeight: 42,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
+    fontSize: 30,
+    lineHeight: 38,
   },
   split: {
     flexDirection: 'row',
@@ -118,7 +120,6 @@ const styles = StyleSheet.create({
   },
   columnValue: {
     fontSize: 17,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
+    lineHeight: 22,
   },
 });

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BillSummaryCard } from '@/components/bill/bill-summary-card';
@@ -18,7 +18,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { ConnectionIndicator } from '@/components/ui/connection-status';
+import { Appear } from '@/components/ui/appear';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SkeletonList } from '@/components/ui/skeleton';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAdminBill } from '@/hooks/use-admin-bill';
@@ -60,7 +62,8 @@ export default function BillScreen() {
         <View style={styles.content}>
           <ScreenHeader title="No bill open" />
           <EmptyState
-            message="Pick a table first."
+            icon="🍽"
+            message="Pick a table first"
             hint="Open one of your tables and start its bill."
           />
           <Button label="Go to my tables" onPress={() => router.replace('/dashboard')} />
@@ -94,9 +97,11 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
   if (bill.loading && bill.items.length === 0) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.centered} edges={['bottom']}>
-          <ActivityIndicator />
-          <ThemedText type="secondary">Loading the bill…</ThemedText>
+        {/* The bill's own shape while it is on its way, so the page is
+            already laid out when the figures land and nothing jumps. */}
+        <SafeAreaView style={styles.loading} edges={['bottom']}>
+          <SkeletonList rows={1} height={132} />
+          <SkeletonList rows={3} height={88} />
         </SafeAreaView>
       </ThemedView>
     );
@@ -158,11 +163,11 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
               />
 
               <View style={styles.people}>
-                {bill.participants.map((person) => {
+                {bill.participants.map((person, index) => {
                   const totals = bill.personTotals[person.id];
                   return (
+                    <Appear key={person.id} index={index}>
                     <PersonCard
-                      key={person.id}
                       person={person}
                       isMe={person.id === bill.myParticipantId}
                       totalCents={totals?.totalCents ?? 0}
@@ -180,6 +185,7 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
                       onRemoveOne={() => {}}
                       onToggleSettled={() => {}}
                     />
+                    </Appear>
                   );
                 })}
               </View>
@@ -188,6 +194,7 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
 
           {bill.localItems.length === 0 ? (
             <EmptyState
+              icon="🧾"
               message="No items yet"
               hint="Waiting for the receipt to be added."
             />
@@ -394,9 +401,11 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   if (bill.loading && !bill.bill) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.centered} edges={['bottom']}>
-          <ActivityIndicator />
-          <ThemedText type="secondary">Loading the bill…</ThemedText>
+        {/* The bill's own shape while it is on its way, so the page is
+            already laid out when the figures land and nothing jumps. */}
+        <SafeAreaView style={styles.loading} edges={['bottom']}>
+          <SkeletonList rows={1} height={132} />
+          <SkeletonList rows={3} height={88} />
         </SafeAreaView>
       </ThemedView>
     );
@@ -441,11 +450,11 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
               />
 
               <View style={styles.people}>
-                {bill.participants.map((person) => {
+                {bill.participants.map((person, index) => {
                   const totals = bill.personTotals[person.id];
                   return (
+                    <Appear key={person.id} index={index}>
                     <PersonCard
-                      key={person.id}
                       person={person}
                       isMe={person.id === bill.myParticipantId}
                       totalCents={totals?.totalCents ?? 0}
@@ -474,6 +483,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                       }
                       onToggleSettled={() => toggleSettled(person)}
                     />
+                    </Appear>
                   );
                 })}
               </View>
@@ -489,6 +499,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
 
             {bill.items.length === 0 ? (
               <EmptyState
+                icon="🧾"
                 message="No items yet"
                 hint="Add items manually or scan the receipt."
               />
@@ -758,6 +769,12 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
+  loading: {
+    flex: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    gap: Spacing.lg,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',

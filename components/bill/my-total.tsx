@@ -1,7 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { AnimatedMoney } from '@/components/ui/animated-money';
 import { Radius, Spacing } from '@/constants/theme';
+import { useElevation } from '@/hooks/use-elevation';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCents } from '@/lib/money';
 import type { BillItem } from '@/lib/types';
@@ -33,16 +35,25 @@ export function MyTotal({
 }: MyTotalProps) {
   const accent = useThemeColor({}, 'accent');
   const accentText = useThemeColor({}, 'accentText');
+  // The one card on the screen that is about the reader rather than the table,
+  // so it is the one allowed to float above everything else.
+  const depth = useElevation(3);
 
   return (
-    <View style={[styles.card, { backgroundColor: accent }]}>
+    <View style={[styles.card, { backgroundColor: accent }, depth]}>
       <View style={styles.headline}>
         <ThemedText type="label" style={[styles.label, { color: accentText }]}>
           Your Total
         </ThemedText>
-        <ThemedText style={[styles.total, { color: accentText }]}>
-          {formatCents(totalCents, currency)}
-        </ThemedText>
+        {/* Counts rather than blinks: this figure changes because somebody
+            else at the table claimed something, and a number that simply
+            becomes a different number gives no clue that happened. */}
+        <AnimatedMoney
+          cents={totalCents}
+          currency={currency}
+          size="moneyLarge"
+          style={[styles.total, { color: accentText }]}
+        />
       </View>
 
       {evenSplit ? (
@@ -97,9 +108,7 @@ const styles = StyleSheet.create({
   },
   total: {
     fontSize: 32,
-    lineHeight: 42,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
+    lineHeight: 40,
   },
   empty: {
     opacity: 0.7,
