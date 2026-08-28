@@ -33,7 +33,7 @@ export function parseReceipt(imageUri: string, tableId: string) {
  */
 export function toBillItems(receipt: ParsedReceipt): BillItem[] {
   return receipt.items.map((item) =>
-    createBillItem(item.name, toCents(item.price), item.quantity)
+    createBillItem(item.name, toCents(item.price), item.quantity, item.kind)
   );
 }
 

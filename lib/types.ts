@@ -29,6 +29,14 @@ export type BillItem = {
   /** Price of a single unit, in integer cents. */
   unitPriceCents: number;
   quantity: number;
+  /**
+   * What the scanner said a line is — "bere" for a URSUS.
+   *
+   * Carried from the scan to the reconciliation screen and used only there, to
+   * link a printed brand to a category somebody typed. Never stored: the bill
+   * keeps names and numbers.
+   */
+  kind?: string;
 };
 
 /** How many shares each participant has claimed, per item: claims[itemId][participantId]. */

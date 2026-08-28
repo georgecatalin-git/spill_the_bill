@@ -28,8 +28,14 @@ const RECEIPT_SCHEMA = {
           name: { type: 'string' },
           quantity: { type: 'integer' },
           unit_price: { type: 'number' },
+          // What the thing is, in the everyday word for it. The name on a
+          // receipt is often only a brand — "URSUS", "MALFY" — and the person
+          // who typed it into the app during the meal wrote "bere" or "gin".
+          // The model already knows which is which; this is the only place that
+          // knowledge is free.
+          kind: { type: 'string' },
         },
-        required: ['name', 'quantity', 'unit_price'],
+        required: ['name', 'quantity', 'unit_price', 'kind'],
         additionalProperties: false,
       },
     },
@@ -73,6 +79,19 @@ Quantity: the printed count, or 1 when none is printed.
 Names: keep them as printed, abbreviations included. Do not translate, expand
 or tidy them — the person reviewing knows what they ordered, and an invented
 name is worse than a terse one.
+
+kind: the everyday Romanian word for what the line IS, not what it is called.
+A receipt prints brands; people say categories. "URSUS 0.5" is bere. "TUBORG"
+is bere. "MALFY GIN" is gin. "BORSEC" is apa. "PEPSI MAX" is cola. "CABERNET
+SAUVIGNON" is vin. "CIORBA DE BURTA" is ciorba. Use one or two lower-case
+words, no brand, no size. When the line already is the everyday word, repeat
+it: "CARTOFI PRAJITI" is cartofi.
+
+Leave kind as an empty string when you do not recognise what it is — a local
+brand you have never heard of, or a name too abbreviated to tell. A guess here
+is worse than nothing: it is used to match this line against what somebody
+typed earlier, and a wrong category quietly attaches their beers to somebody
+else's gin.
 
 Skip everything that is not something someone ate or drank: subtotals, tax and
 VAT lines, service charges, tips, discounts, loyalty points, table and cover
@@ -259,7 +278,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-type ParsedItem = { name: string; quantity: number; unit_price: number };
+type ParsedItem = { name: string; quantity: number; unit_price: number; kind?: string };
 type ParsedReceipt = {
   items: ParsedItem[];
   total: number;
@@ -320,6 +339,12 @@ function validate(receipt: ParsedReceipt) {
     }
     if (!Number.isFinite(item.unit_price) || item.unit_price < 0) {
       throw new Error(`Invalid price for "${item.name}".`);
+    }
+
+    // A kind is a hint, never a reason to refuse a scan the admin has already
+    // paid for. An unusable one is dropped rather than raised.
+    if (typeof item.kind !== 'string' || item.kind.trim().length > 40) {
+      item.kind = '';
     }
   }
 

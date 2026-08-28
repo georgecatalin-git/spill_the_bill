@@ -45,6 +45,14 @@ export type ReceiptLine = {
   name: string;
   quantity: number;
   unitPriceCents: number;
+  /**
+   * What the scanner said this is — "bere" for a URSUS.
+   *
+   * A receipt prints brands; the person keeping the tab typed a category. When
+   * the two share no word at all, this is the only thing linking them, and it
+   * is treated as a reason to *ask* rather than a reason to decide.
+   */
+  kind?: string;
 };
 
 export type ReconKind =
@@ -348,7 +356,7 @@ export function reconcile(
   }
 
   const tabNames = tab.map((line) => normaliseName(line.name));
-  const receiptNames = products.map((line) => normaliseName(line.name));
+  const receiptNames = products.map((line) => normaliseName(line.name, line.kind));
   const weightOf = tokenWeights([...tabNames, ...receiptNames]);
 
   const score = tabNames.map((left) =>

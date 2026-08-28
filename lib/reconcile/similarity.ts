@@ -146,11 +146,41 @@ function containment(from: string[], to: string[], weightOf: TokenWeight) {
  */
 const CONTAINMENT_WEIGHT = 0.7;
 
+/**
+ * What a match on the category alone is worth.
+ *
+ * Deliberately inside the band where the app asks rather than decides. A
+ * receipt that prints only "URSUS" shares no word at all with a tab that says
+ * "bere", and the scanner telling us it is a beer is good evidence — but it is
+ * evidence about a kind of thing, not about this line, and the difference
+ * between five beers and fifteen is a hundred and fifty lei. The name stays the
+ * only witness that can close a match on its own.
+ */
+const KIND_MATCH = 0.62;
+
+/** How well the category has to match before it is worth anything at all. */
+const KIND_CONFIDENCE = 0.75;
+
 export function nameSimilarity(a: NormalisedName, b: NormalisedName, weightOf: TokenWeight) {
   // Two sizes that disagree are two products. No amount of name overlap
-  // outranks that: a small beer and a large one share every letter.
+  // outranks that: a small beer and a large one share every letter. It
+  // outranks the category too — "bere 0.33" and a 0.5 URSUS are not the same
+  // line however sure the scanner is about what a URSUS is.
   if (sizesContradict(a, b)) return 0;
 
+  const direct = directSimilarity(a, b, weightOf);
+  if (direct >= KIND_MATCH) return direct;
+
+  // Nothing in the names. Ask what the scanner said the line is.
+  const viaKind = Math.max(
+    b.kind ? directSimilarity(a, b.kind, weightOf) : 0,
+    a.kind ? directSimilarity(a.kind, b, weightOf) : 0
+  );
+
+  return viaKind >= KIND_CONFIDENCE ? KIND_MATCH : direct;
+}
+
+function directSimilarity(a: NormalisedName, b: NormalisedName, weightOf: TokenWeight) {
   if (a.tokens.length === 0 || b.tokens.length === 0) return 0;
   if (a.tokens.join(' ') === b.tokens.join(' ')) return 1;
 
@@ -189,8 +219,8 @@ function glued(a: NormalisedName, b: NormalisedName) {
 }
 
 /** Same thing, for callers holding raw strings — used by the tests and by tooling. */
-export function compareNames(a: string, b: string) {
+export function compareNames(a: string, b: string, bKind?: string) {
   const left = normaliseName(a);
-  const right = normaliseName(b);
+  const right = normaliseName(b, bKind);
   return nameSimilarity(left, right, tokenWeights([left, right]));
 }

@@ -26,7 +26,7 @@ const JPEG_QUALITY = 0.8;
 
 /** Shape the function returns. `unit_price` is spelled out for the model's sake. */
 type RemoteReceipt = {
-  items: { name: string; quantity: number; unit_price: number }[];
+  items: { name: string; quantity: number; unit_price: number; kind?: string }[];
   total: number;
   currency: string;
 };
@@ -108,6 +108,7 @@ export const claudeReceiptParser: ReceiptParser = async (imageUri, tableId) => {
       name: item.name,
       quantity: item.quantity,
       price: item.unit_price,
+      kind: item.kind?.trim() || undefined,
     })),
     total: data.total,
     currency: data.currency,

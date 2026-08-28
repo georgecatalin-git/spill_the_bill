@@ -3,6 +3,18 @@ export type ParsedReceiptItem = {
   name: string;
   quantity: number;
   price: number;
+  /**
+   * The everyday word for what this is — "bere", "gin", "apa" — as opposed to
+   * what it is called on the paper.
+   *
+   * A receipt prints brands and the person who typed the tab during the meal
+   * wrote a category, so the two share no words at all: "bere" and "URSUS" have
+   * nothing in common to match on. The model reading the photo already knows
+   * which is which, and this is the only place that knowledge costs nothing.
+   * Empty when it could not tell — a guess here would attach somebody's beers
+   * to somebody else's gin.
+   */
+  kind?: string;
 };
 
 export type ParsedReceipt = {

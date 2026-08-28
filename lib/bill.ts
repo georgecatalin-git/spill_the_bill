@@ -10,11 +10,17 @@ export function parseQuantity(text: string) {
   return value;
 }
 
-export function createBillItem(name: string, unitPriceCents: number, quantity = 1): BillItem {
+export function createBillItem(
+  name: string,
+  unitPriceCents: number,
+  quantity = 1,
+  kind?: string
+): BillItem {
   return {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     name: name.trim(),
     unitPriceCents,
     quantity,
+    kind,
   };
 }

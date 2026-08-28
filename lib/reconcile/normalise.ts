@@ -22,6 +22,12 @@ export type NormalisedName = {
   tokens: string[];
   /** The size printed in the name, in ml or g. "0.5" becomes 500 ml. */
   size: ItemSize | null;
+  /**
+   * What the scanner said the line *is* — "bere" for a URSUS — normalised the
+   * same way, so it can be compared like any other name. Null on the tab side:
+   * a person typing during the meal writes the category already.
+   */
+  kind: NormalisedName | null;
 };
 
 /**
@@ -138,7 +144,7 @@ function tokenise(value: string) {
   return kept.length > 0 ? kept : mapped;
 }
 
-export function normaliseName(raw: string): NormalisedName {
+export function normaliseName(raw: string, kind?: string | null): NormalisedName {
   const folded = foldName(raw);
 
   // "3 x 8,00" and "2X" are the till spelling out the multiplication. The
@@ -153,7 +159,14 @@ export function normaliseName(raw: string): NormalisedName {
 
   const { size, rest } = extractSize(withoutPrice);
 
-  return { raw: raw.trim(), tokens: tokenise(rest), size };
+  return {
+    raw: raw.trim(),
+    tokens: tokenise(rest),
+    size,
+    // One level only. A category has no category of its own, and the recursion
+    // would have nowhere to stop.
+    kind: kind && kind.trim() ? normaliseName(kind) : null,
+  };
 }
 
 /** True when both names name a size and the sizes are not the same product. */

@@ -27,8 +27,8 @@ let seq = 0;
 const t = (name: string, quantity = 1, unitPriceCents = 0, claimedUnits = 0): TabLine => ({
   id: `t${++seq}`, name, quantity, unitPriceCents, claimedUnits,
 });
-const r = (name: string, quantity = 1, unitPriceCents = 0): ReceiptLine => ({
-  id: `r${++seq}`, name, quantity, unitPriceCents,
+const r = (name: string, quantity = 1, unitPriceCents = 0, kind?: string): ReceiptLine => ({
+  id: `r${++seq}`, name, quantity, unitPriceCents, kind,
 });
 
 let passed = 0;
@@ -505,6 +505,51 @@ function planned(title: string, plan: ApplyPlan, expect: [string, boolean][]) {
     ['no writes at all', plan.items.length === 0],
   ]);
 }
+
+console.log('\n— When the receipt prints only the brand —');
+
+// The scanner is asked what each line *is*, because a receipt prints "URSUS"
+// and the person keeping the tab typed "bere". The two share no letters.
+scenario('"bere" and "URSUS" have nothing in common without the scanner',
+  [t('bere', 1, 1500), t('bere', 1, 1500)],
+  [r('URSUS', 15, 1500)],
+  (g) => [
+    ['nothing links them', !!one(g, 'only_on_tab') && !!one(g, 'only_on_receipt')],
+  ]);
+
+scenario('the scanner says a URSUS is a bere, so the app asks',
+  [t('bere', 1, 1500, 1), t('bere', 1, 1500, 1), t('bere', 1, 1500),
+   t('bere', 1, 1500), t('bere', 1, 1500)],
+  [r('URSUS', 15, 1500, 'bere')],
+  (g) => {
+    const group = g[0];
+    return [
+      ['one group, not two', g.length === 1],
+      ['a guess, so it asks', group?.confidence === 'likely' && group.defaultDecision === 'match_by_hand'],
+      ['and it knows ten are missing, not fifteen', group?.missingUnits === 10],
+    ];
+  });
+
+scenario('a category never outranks a size that disagrees',
+  [t('bere 0.33', 1, 600)],
+  [r('URSUS 0.5', 4, 800, 'bere')],
+  (g) => [['still two sides', !!one(g, 'only_on_tab') && !!one(g, 'only_on_receipt')]]);
+
+scenario('two brands of the same category: the app asks which',
+  [t('bere', 1, 1500), t('bere', 1, 1500)],
+  [r('URSUS', 3, 1500, 'bere'), r('TIMISOREANA', 2, 1500, 'bere')],
+  (g) => [['ambiguous', !!one(g, 'ambiguous')]]);
+
+scenario('a real name match still beats the category, and stays certain',
+  [t('bere', 1, 1500), t('bere', 1, 1500)],
+  [r('BERE URSUS 0.5', 2, 1500, 'bere')],
+  (g) => [['agreed and certain',
+    g.length === 1 && g[0].kind === 'agreed' && g[0].confidence === 'certain']]);
+
+scenario('gin, the same way round',
+  [t('gin tonic', 1, 3000)],
+  [r('MALFY', 1, 3000, 'gin')],
+  (g) => [['matched as a guess', g.length === 1 && g[0].confidence === 'likely']]);
 
 console.log('\n— A whole table —');
 {

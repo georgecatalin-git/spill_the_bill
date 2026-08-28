@@ -1211,6 +1211,29 @@ twice.
   per-restaurant table learned from confirmed matches, so a place that prints
   "AQUA CARPATICA" for what everyone types as "apa plata" is told once.
 
+**The scanner says what each line is, and that is a second witness.** A receipt
+prints "URSUS"; the person keeping the tab typed "bere". They share no letter,
+and no amount of string comparison will ever join them. But the model reading
+the photo already knows what a URSUS is, so it is asked: `kind` is the everyday
+Romanian word for what the line *is*, alongside the name as printed. "MALFY" is
+gin, "BORSEC" is apa, "PEPSI MAX" is cola.
+
+**A category is a reason to ask, never a reason to decide.** It scores 0.62 —
+inside the band where the app puts the question to a person and refuses to
+apply until it is answered. The name stays the only witness that can close a
+match on its own, because a category is evidence about a *kind* of thing rather
+than about this line, and the difference between five beers and fifteen is a
+hundred and fifty lei. Two brands of the same category come out ambiguous,
+which is the app asking *which* — exactly right.
+
+A size that disagrees still outranks it: "bere 0.33" and a 0.5 URSUS are not
+the same line however sure the scanner is about what a URSUS is.
+
+The prompt tells the model to leave `kind` empty when it does not recognise
+something, in the same words the fiscal fields use. A guess there would quietly
+attach somebody's beers to somebody else's gin — and unlike a misread price,
+nobody would see it happen.
+
 **Some receipt lines are not something anybody ordered**, and adding them as
 items would be wrong in both directions at once: service and tip already have
 their own columns and would be counted twice, and a discount cannot be stored at

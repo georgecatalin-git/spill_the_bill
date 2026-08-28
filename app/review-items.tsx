@@ -98,6 +98,11 @@ export default function ReviewItemsScreen() {
                 name: item.name,
                 quantity: item.quantity,
                 unitPriceCents: item.unitPriceCents,
+                // Carried through so the matcher can link a printed brand to a
+                // category somebody typed during the meal. Editing a line by
+                // hand drops it, which is right: the reader has just told us
+                // what the line says.
+                kind: item.kind,
               }))
             ),
           },
