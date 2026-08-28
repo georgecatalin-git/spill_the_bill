@@ -1,8 +1,7 @@
 import { StyleSheet } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
-import { Motion } from '@/constants/theme';
+import { Appear } from '@/components/ui/appear';
 
 type ScreenHeaderProps = {
   title: string;
@@ -18,7 +17,7 @@ type ScreenHeaderProps = {
  */
 export function ScreenHeader({ title, subtitle }: ScreenHeaderProps) {
   return (
-    <Animated.View entering={FadeInDown.duration(Motion.base)} style={styles.header}>
+    <Appear style={styles.header}>
       <ThemedText type="title" accessibilityRole="header" style={styles.title}>
         {title}
       </ThemedText>
@@ -27,7 +26,7 @@ export function ScreenHeader({ title, subtitle }: ScreenHeaderProps) {
           {subtitle}
         </ThemedText>
       )}
-    </Animated.View>
+    </Appear>
   );
 }
 

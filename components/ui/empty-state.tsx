@@ -1,11 +1,10 @@
 import { type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
+import { Appear } from '@/components/ui/appear';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { enterSoft } from '@/lib/motion';
 
 type EmptyStateProps = {
   message: string;
@@ -30,9 +29,7 @@ export function EmptyState({ message, hint, icon, action }: EmptyStateProps) {
   const textSecondary = useThemeColor({}, 'textSecondary');
 
   return (
-    <Animated.View
-      entering={enterSoft}
-      style={[styles.container, { borderColor: border, backgroundColor: surface }]}>
+    <Appear style={[styles.container, { borderColor: border, backgroundColor: surface }]}>
       {icon && (
         <View style={[styles.badge, { backgroundColor: border }]}>
           <ThemedText style={[styles.icon, { color: textSecondary }]}>{icon}</ThemedText>
@@ -48,7 +45,7 @@ export function EmptyState({ message, hint, icon, action }: EmptyStateProps) {
       )}
 
       {action && <View style={styles.action}>{action}</View>}
-    </Animated.View>
+    </Appear>
   );
 }
 

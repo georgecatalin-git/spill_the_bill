@@ -59,7 +59,11 @@ export function Button({
   return (
     // Only a raised button casts one. A secondary button that floats reads as
     // two primary buttons, and the hierarchy is the point.
-    <View style={isPrimary && !blocked ? depth : undefined}>
+    //
+    // The wrapper needs the same radius as the face: a shadow takes the shape
+    // of the view that casts it, and without this a pill sits inside a
+    // rectangular smudge.
+    <View style={[styles.shadow, isPrimary && !blocked ? depth : null]}>
       <PressableScale
         accessibilityRole="button"
         accessibilityState={{ disabled: Boolean(blocked), busy: Boolean(loading) }}
@@ -84,6 +88,9 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
+  shadow: {
+    borderRadius: Radius.pill,
+  },
   face: {
     borderRadius: Radius.pill,
     paddingVertical: Spacing.md,

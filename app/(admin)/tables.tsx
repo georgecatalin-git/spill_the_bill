@@ -1,18 +1,18 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TableCard } from '@/components/admin/table-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Appear } from '@/components/ui/appear';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { enterList, settle } from '@/lib/motion';
+
 import { openTable, useAdminTables } from '@/lib/services/use-admin-tables';
 
 export default function TablesScreen() {
@@ -50,9 +50,9 @@ export default function TablesScreen() {
                   </ThemedText>
                   <View style={styles.list}>
                     {active.map((table, index) => (
-                      <Animated.View key={table.id} entering={enterList(index)} layout={settle}>
+                      <Appear key={table.id} index={index}>
                         <TableCard table={table} onPress={() => openTable(table)} />
-                      </Animated.View>
+                      </Appear>
                     ))}
                   </View>
                 </View>
@@ -65,14 +65,13 @@ export default function TablesScreen() {
                   </ThemedText>
                   <View style={styles.list}>
                     {completed.map((table, index) => (
-                      <Animated.View
+                      <Appear
                         key={table.id}
                         // Continues the count from the active list, so the two
                         // sections read as one sequence rather than restarting.
-                        entering={enterList(active.length + index)}
-                        layout={settle}>
+                        index={active.length + index}>
                         <TableCard table={table} onPress={() => openTable(table)} />
-                      </Animated.View>
+                      </Appear>
                     ))}
                   </View>
                 </View>
