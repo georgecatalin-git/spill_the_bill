@@ -1,13 +1,15 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TableCard } from '@/components/admin/table-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Appear } from '@/components/ui/appear';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SkeletonList } from '@/components/ui/skeleton';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getGreeting } from '@/lib/greeting';
@@ -47,9 +49,10 @@ export default function DashboardScreen() {
             </ThemedText>
 
             {loading && tables.length === 0 ? (
-              <ActivityIndicator />
+              <SkeletonList rows={2} height={96} />
             ) : open.length === 0 ? (
               <EmptyState
+                icon={restaurant ? '🪑' : '🍽'}
                 message={restaurant ? 'Nothing open right now' : 'No tables yet'}
                 hint={
                   restaurant
@@ -59,8 +62,10 @@ export default function DashboardScreen() {
               />
             ) : (
               <View style={styles.list}>
-                {open.map((table) => (
-                  <TableCard key={table.id} table={table} onPress={() => openTable(table)} />
+                {open.map((table, index) => (
+                  <Appear key={table.id} index={index}>
+                    <TableCard table={table} onPress={() => openTable(table)} />
+                  </Appear>
                 ))}
               </View>
             )}
@@ -79,8 +84,12 @@ export default function DashboardScreen() {
               </ThemedText>
 
               <View style={styles.list}>
-                {closed.map((table) => (
-                  <TableCard key={table.id} table={table} onPress={() => openTable(table)} />
+                {closed.map((table, index) => (
+                  // Continues the count from the open list above, so the page
+                  // reads as one sequence rather than restarting halfway down.
+                  <Appear key={table.id} index={open.length + index}>
+                    <TableCard table={table} onPress={() => openTable(table)} />
+                  </Appear>
                 ))}
               </View>
             </View>

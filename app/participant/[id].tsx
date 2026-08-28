@@ -107,6 +107,7 @@ export default function ParticipantScreen() {
 
           {detail.lines.length === 0 && !detail.tipCents ? (
             <EmptyState
+              icon="🫙"
               message="Nothing claimed yet"
               hint={`${detail.name} hasn't picked anything from the receipt.`}
             />

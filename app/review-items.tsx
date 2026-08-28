@@ -177,6 +177,7 @@ export default function ReviewItemsScreen() {
 
           {items.length === 0 ? (
             <EmptyState
+              icon="🧾"
               message="No items left"
               hint="Add the items by hand, or go back and scan again."
             />

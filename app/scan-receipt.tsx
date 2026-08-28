@@ -53,6 +53,7 @@ export default function ScanReceiptScreen() {
           ) : (
             <View style={styles.permission}>
               <EmptyState
+                icon="📷"
                 message="Camera access needed"
                 hint="Allow the camera to scan a receipt, or pick one from your photos."
               />

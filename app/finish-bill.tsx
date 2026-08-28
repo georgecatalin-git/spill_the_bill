@@ -111,7 +111,7 @@ export default function FinishBillScreen() {
           <ScreenHeader title="Finish Bill" subtitle="Everyone's share" />
 
           {shares.length === 0 ? (
-            <EmptyState message="Nobody has claimed anything yet." />
+            <EmptyState icon="🫱" message="Nobody has claimed anything yet." />
           ) : (
             <View>
               {shares.map((share, index) => (

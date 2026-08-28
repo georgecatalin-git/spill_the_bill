@@ -36,6 +36,7 @@ export default function JoinScreen() {
         <SafeAreaView style={styles.safeArea} edges={['bottom']}>
           <ScreenHeader title="Invalid invitation" />
           <EmptyState
+            icon="🔗"
             message="This invitation link is no longer valid."
             hint="Ask for a new link from whoever created the table."
           />

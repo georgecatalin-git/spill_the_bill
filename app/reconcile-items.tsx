@@ -190,6 +190,7 @@ export default function ReconcileItemsScreen() {
 
           {toAnswer.length === 0 ? (
             <EmptyState
+              icon="✓"
               message="The receipt and the tab agree"
               hint="Nothing to decide. Keep the receipt and carry on."
             />

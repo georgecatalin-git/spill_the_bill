@@ -75,6 +75,7 @@ export default function ReceiptPhotoScreen() {
             </View>
           ) : !url ? (
             <EmptyState
+              icon="🖼"
               message="No photo was kept"
               hint="This bill was typed in by hand, or scanned before photos were saved."
             />

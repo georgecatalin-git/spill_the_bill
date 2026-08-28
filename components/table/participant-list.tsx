@@ -17,6 +17,7 @@ export function ParticipantList({ participants }: ParticipantListProps) {
   if (participants.length === 0) {
     return (
       <EmptyState
+        icon="👋"
         message="No one has joined yet."
         hint="Share the invitation link to get started."
       />

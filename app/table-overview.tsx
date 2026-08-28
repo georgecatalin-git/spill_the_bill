@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BillTotals } from '@/components/bill/bill-totals';
@@ -8,12 +8,16 @@ import { EvenSplit } from '@/components/bill/even-split';
 import { TipSplit } from '@/components/bill/tip-split';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { AnimatedMoney } from '@/components/ui/animated-money';
+import { Appear } from '@/components/ui/appear';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ConnectionIndicator } from '@/components/ui/connection-status';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { SkeletonList } from '@/components/ui/skeleton';
 import { Radius, Spacing } from '@/constants/theme';
+import { useElevation } from '@/hooks/use-elevation';
 import { useRealtimeBill } from '@/hooks/use-realtime-bill';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { formatCents } from '@/lib/money';
@@ -104,6 +108,9 @@ export default function TableOverviewScreen() {
   const accent = useThemeColor({}, 'accent');
   const accentText = useThemeColor({}, 'accentText');
   const success = useThemeColor({}, 'success');
+  // The one card about the reader rather than the table, so the one allowed to
+  // float above the rest — the same rule the bill screen follows.
+  const myTotalDepth = useElevation(3);
 
   const [context, setContext] = useState<TableContext | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -197,9 +204,13 @@ export default function TableOverviewScreen() {
   if (loading && !overview) {
     return (
       <ThemedView style={styles.container}>
-        <SafeAreaView style={styles.centered} edges={['bottom']}>
-          <ActivityIndicator />
-          <ThemedText type="secondary">Loading the bill…</ThemedText>
+        {/* The overview's own shape: the personal total, then the totals
+            block, then the people. Laid out before the figures arrive so
+            nothing shifts under a thumb already reaching for it. */}
+        <SafeAreaView style={styles.loading} edges={['bottom']}>
+          <SkeletonList rows={1} height={96} />
+          <SkeletonList rows={1} height={140} />
+          <SkeletonList rows={4} height={56} />
         </SafeAreaView>
       </ThemedView>
     );
@@ -233,17 +244,24 @@ export default function TableOverviewScreen() {
           )}
 
           {!overview ? (
-            <EmptyState message="Nothing to show yet" hint="The bill has not been started." />
+            <EmptyState
+              icon="⏳"
+              message="Nothing to show yet"
+              hint="The bill has not been started."
+            />
           ) : (
             <>
               {me && (
-                <View style={[styles.myTotal, { backgroundColor: accent }]}>
+                <View style={[styles.myTotal, { backgroundColor: accent }, myTotalDepth]}>
                   <ThemedText type="label" style={[styles.myTotalLabel, { color: accentText }]}>
                     Your Total
                   </ThemedText>
-                  <ThemedText style={[styles.myTotalValue, { color: accentText }]}>
-                    {formatCents(me.totalCents, overview.currency)}
-                  </ThemedText>
+                  <AnimatedMoney
+                    cents={me.totalCents}
+                    currency={overview.currency}
+                    size="moneyLarge"
+                    style={[styles.myTotalValue, { color: accentText }]}
+                  />
                 </View>
               )}
 
@@ -279,8 +297,12 @@ export default function TableOverviewScreen() {
 
                 <View>
                   {people.map((person, index) => (
-                    <View
+                    // Sorted biggest share first, so the order changes as
+                    // people claim. Arriving in sequence rather than as a slab
+                    // makes that reorder legible instead of startling.
+                    <Appear
                       key={person.id}
+                      index={index}
                       style={[
                         styles.personRow,
                         index > 0 && styles.divider,
@@ -301,14 +323,14 @@ export default function TableOverviewScreen() {
                           {person.name}
                           {person.isMe ? ' (You)' : ''}
                         </ThemedText>
-                        <ThemedText
-                          style={[
-                            styles.amount,
-                            // A settled amount is history, not something owed.
-                            person.settled && { color: success, textDecorationLine: 'line-through' },
-                          ]}>
-                          {formatCents(person.totalCents, overview.currency)}
-                        </ThemedText>
+                        {/* Counts when it moves, and strikes through once paid:
+                            a settled amount is history, not something owed. */}
+                        <AnimatedMoney
+                          cents={person.totalCents}
+                          currency={overview.currency}
+                          settled={person.settled}
+                          style={styles.amount}
+                        />
                       </Pressable>
 
                       {isAdmin ? (
@@ -347,7 +369,7 @@ export default function TableOverviewScreen() {
                           </ThemedText>
                         )
                       )}
-                    </View>
+                    </Appear>
                   ))}
                 </View>
               </View>
@@ -363,6 +385,7 @@ export default function TableOverviewScreen() {
 
                 {overview.items.length === 0 ? (
                   <EmptyState
+                    icon="🧾"
                     message="No items yet"
                     hint={
                       isAdmin
@@ -663,6 +686,12 @@ async function loadAsAdmin(tableId: string | undefined): Promise<Overview | null
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
+  loading: {
+    flex: 1,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    gap: Spacing.lg,
+  },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
   content: {
     paddingHorizontal: Spacing.xl,
