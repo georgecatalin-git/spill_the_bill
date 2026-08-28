@@ -83,6 +83,47 @@ single rows, because each of those has to stay claimable on its own; a row that
 already counts just counts higher — five beers turning out to be fifteen is one
 row reading fifteen, never a row of five beside a row of ten.
 
+**The bill opens on the table itself.** Above the cards is a small 3D scene —
+a round top with one figure seated at it per person, facing each other across
+it — drawn with `expo-gl` and three.js from `components/bill/table-scene.tsx`.
+
+`expo-gl` ships inside Expo Go, which is why it was chosen: the Apple account
+that would allow a development build is still the blocker, and a dependency that
+cost the ability to test on a phone would not be worth a picture. Everything is
+built from cylinders, capsules and spheres, so there is no model to load and
+nothing that can arrive late or not at all.
+
+It is a picture of the data, not decoration on top of it. Somebody who has paid
+turns green and sits back; whoever is still ordering leans in.
+
+Four things about it were wrong on the first attempt and are easy to get wrong
+again:
+
+- **Do not take the size once, at context creation.** The drawing buffer is not
+  its final size then — on the first frame the canvas had been laid out
+  vertically but not horizontally, so `drawingBufferWidth` was 1 and
+  `gl.viewport` stayed `[0, 0, 1, 376]` forever. The scene rendered perfectly
+  into a strip three pixels wide. Read the size every frame; that also covers
+  rotation.
+- **`lookAt` turns a whole body.** Aiming a seated figure at the tabletop tips
+  it 23 degrees onto its back, because the target is above it. Aim level.
+- **Lean the body, not the figure.** `lookAt` has already turned the outer
+  group, so its x axis runs along the table's edge; setting `rotation.x` there
+  tips somebody sitting at the side over sideways. The meshes hang in an inner
+  group, and that is what leans.
+- **Negative z is the way a figure faces.** Arms placed at +z reach out into the
+  room with their back to the food.
+
+**The camera is fitted, not placed.** Three rounds of moving it by hand each
+left the nearest seat hanging below the bottom edge at some headcount or other.
+It now stands back far enough for the sphere the scene lives in to fit the
+vertical field of view, and the seating ring widens as people arrive — a ring
+sized for four puts seven shoulder to shoulder.
+
+**The cast is rebuilt in place**, not by tearing down the GL context, and the
+old meshes are disposed as it goes: a table where somebody joins every few
+minutes would otherwise leak buffers all evening.
+
 **The bill is read by person first, items second.** The open bill leads with a
 card per participant — what they owe, and an **Add item** button beside their
 name — and keeps the item list underneath.

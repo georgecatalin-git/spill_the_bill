@@ -54,10 +54,41 @@ function canvasFor(gl: ExpoWebGLRenderingContext) {
 
 /** Seated height, so every figure is built against one number. */
 const TABLE_TOP = 0.9;
-const SEAT_RADIUS = 2.15;
 
-function buildFigure(seat: SceneSeat, index: number, count: number, accent: THREE.Color) {
+/**
+ * How far out the seats sit, and how far back the camera stands.
+ *
+ * Both grow with the headcount. A ring sized for four puts seven shoulder to
+ * shoulder, and a camera placed for four cuts the nearest of seven off at the
+ * bottom edge — the table has to be given room as people arrive, the same way a
+ * real one does.
+ */
+function seatRadius(count: number) {
+  return 1.9 + Math.max(0, count - 4) * 0.13;
+}
+
+/** Everything the scene draws sits inside this sphere, centred on the table. */
+const SCENE_CENTRE_Y = 0.7;
+
+function sceneRadius(count: number) {
+  return seatRadius(count) + 0.45;
+}
+
+/** Vertical field of view. The frame is far wider than it is tall, so this is
+ *  always the dimension that runs out first. */
+const FOV = 50;
+
+function buildFigure(seat: SceneSeat, index: number, count: number) {
   const group = new THREE.Group();
+
+  // The body hangs in a group of its own, and that is what leans.
+  //
+  // Leaning the outer group would not work: `lookAt` has already turned it to
+  // face the table, so its x axis points along the table's edge rather than
+  // forwards. Setting `rotation.x` there tips somebody sitting at the side of
+  // the table over sideways instead of leaning them in.
+  const body = new THREE.Group();
+  group.add(body);
 
   // A hue per seat, spread evenly, so neighbours never share a colour. Somebody
   // who has paid leaves that scheme entirely — it should be the one thing you
@@ -70,35 +101,34 @@ function buildFigure(seat: SceneSeat, index: number, count: number, accent: THRE
 
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.44, 6, 16), skin);
   torso.position.y = TABLE_TOP - 0.08;
-  group.add(torso);
+  body.add(torso);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 18), skin);
   head.position.y = TABLE_TOP + 0.42;
-  group.add(head);
+  body.add(head);
 
   // Arms, reaching towards the table. Two capsules is enough to read as "seated
   // at" rather than "standing near".
+  //
+  // Negative z is the way they face: `lookAt` points a body's -Z at its target,
+  // so arms placed at +z reach out into the room with their back to the food.
   for (const side of [-1, 1]) {
     const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.3, 4, 10), skin);
-    arm.position.set(side * 0.26, TABLE_TOP - 0.02, 0.16);
-    arm.rotation.x = -0.75;
+    arm.position.set(side * 0.26, TABLE_TOP - 0.02, -0.16);
+    arm.rotation.x = 0.75;
     arm.rotation.z = side * 0.28;
-    group.add(arm);
+    body.add(arm);
   }
 
-  const chair = new THREE.Mesh(
-    new THREE.BoxGeometry(0.52, 0.46, 0.07),
-    new THREE.MeshStandardMaterial({ color: accent, roughness: 0.85, metalness: 0 })
-  );
-  chair.position.set(0, TABLE_TOP - 0.02, -0.36);
-  group.add(chair);
-
   const angle = (index / Math.max(count, 1)) * Math.PI * 2;
-  group.position.set(Math.sin(angle) * SEAT_RADIUS, 0, Math.cos(angle) * SEAT_RADIUS);
+  const radius = seatRadius(count);
+  group.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
 
-  // Facing the middle of the table is what puts them opposite one another,
-  // whatever the headcount turns out to be.
-  group.lookAt(0, TABLE_TOP, 0);
+  // Facing the middle is what puts them opposite one another, whatever the
+  // headcount turns out to be — and the target is level with them, not at the
+  // tabletop. Aiming at the tabletop tips every figure 23 degrees onto its
+  // back, because `lookAt` turns the whole body towards a point above it.
+  group.lookAt(0, 0, 0);
 
   return group;
 }
@@ -124,20 +154,16 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
   }, [signature]);
 
   function onContextCreate(gl: ExpoWebGLRenderingContext) {
-    const width = gl.drawingBufferWidth;
-    const height_ = gl.drawingBufferHeight;
-
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasFor(gl),
       context: gl as unknown as WebGLRenderingContext,
       antialias: true,
       alpha: true,
     });
-    renderer.setSize(width, height_, false);
     renderer.setClearColor(0x000000, 0);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, width / height_, 0.1, 60);
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 60);
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.7));
     const key = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -153,7 +179,7 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
       metalness: 0.05,
     });
 
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, 0.11, 56), wood);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 0.11, 56), wood);
     top.position.y = TABLE_TOP;
     scene.add(top);
 
@@ -165,7 +191,6 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
     foot.position.y = 0.035;
     scene.add(foot);
 
-    const accent = new THREE.Color(border);
     const cast = new THREE.Group();
     scene.add(cast);
 
@@ -185,7 +210,7 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
 
       const current = seatsRef.current;
       current.forEach((seat, index) => {
-        cast.add(buildFigure(seat, index, current.length, accent));
+        cast.add(buildFigure(seat, index, current.length));
       });
     }
 
@@ -193,17 +218,56 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
     rebuild();
 
     let frame = 0;
+    let sized = '';
     const started = Date.now();
+
+    /**
+     * The drawing buffer is not its final size when the context is created.
+     *
+     * This cost an afternoon: on the first frame the canvas had been laid out
+     * vertically but not horizontally, so `drawingBufferWidth` was 1 — and a
+     * size taken once, there, left `gl.viewport` at [0, 0, 1, 376] forever. The
+     * scene rendered perfectly into a strip three pixels wide. Reading the size
+     * every frame also covers rotation and a window being dragged.
+     */
+    function fit() {
+      const width = gl.drawingBufferWidth;
+      const height_ = gl.drawingBufferHeight;
+      if (width < 1 || height_ < 1) return false;
+
+      const key = `${width}x${height_}`;
+      if (key === sized) return true;
+
+      sized = key;
+      renderer.setSize(width, height_, false);
+      camera.aspect = width / height_;
+      camera.updateProjectionMatrix();
+      return true;
+    }
 
     function draw() {
       frame = requestAnimationFrame(draw);
+      if (!fit()) return;
+
       const t = (Date.now() - started) / 1000;
 
       // A slow orbit, so the table reads as a solid thing rather than a picture
       // of one. Slow enough not to compete with the numbers underneath.
+      // Stood back far enough to hold the whole table, worked out rather than
+      // guessed. Three rounds of moving the camera by hand all left the nearest
+      // seat hanging below the bottom edge at some headcount or other; fitting
+      // the sphere the scene lives in cannot, whoever turns up.
       const orbit = t * 0.16;
-      camera.position.set(Math.sin(orbit) * 5.4, 3.4, Math.cos(orbit) * 5.4);
-      camera.lookAt(0, TABLE_TOP - 0.15, 0);
+      const radius = sceneRadius(seatsRef.current.length);
+      const away = (radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 1.22;
+      const elevation = THREE.MathUtils.degToRad(34);
+
+      camera.position.set(
+        Math.sin(orbit) * Math.cos(elevation) * away,
+        SCENE_CENTRE_Y + Math.sin(elevation) * away,
+        Math.cos(orbit) * Math.cos(elevation) * away
+      );
+      camera.lookAt(0, SCENE_CENTRE_Y, 0);
 
       const current = seatsRef.current;
       cast.children.forEach((figure, index) => {
@@ -215,7 +279,8 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
 
         // Paid up means sitting back. Still ordering means leaning in.
         const lean = seat?.settled ? -0.05 : seat?.active ? 0.07 : 0.02;
-        figure.rotation.x = lean + Math.sin(t * 1.1 + phase) * 0.012;
+        const body = figure.children[0];
+        if (body) body.rotation.x = lean + Math.sin(t * 1.1 + phase) * 0.012;
       });
 
       renderer.render(scene, camera);
