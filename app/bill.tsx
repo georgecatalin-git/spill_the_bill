@@ -245,7 +245,7 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const [addVisible, setAddVisible] = useState(false);
   const [addingFor, setAddingFor] = useState<Participant | null>(null);
   const [settling, setSettling] = useState<string | null>(null);
-  const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [totalsVisible, setTotalsVisible] = useState(false);
   const [editing, setEditing] = useState<DbBillItem | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -254,17 +254,18 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
   const draft = bill.bill?.status === 'DRAFT';
   const completed = bill.bill?.status === 'COMPLETED';
 
-  async function addOneMore(itemId: string, participantId: string) {
-    setAddingTo(itemId);
+  async function stepLine(
+    itemId: string,
+    step: () => Promise<void>,
+    failure: string
+  ) {
+    setPendingItemId(itemId);
     try {
-      await bill.addOneMore(itemId, participantId);
+      await step();
     } catch (caught) {
-      Alert.alert(
-        'Could not add another',
-        caught instanceof Error ? caught.message : 'Please try again.'
-      );
+      Alert.alert(failure, caught instanceof Error ? caught.message : 'Please try again.');
     } finally {
-      setAddingTo(null);
+      setPendingItemId(null);
     }
   }
 
@@ -379,9 +380,22 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
                       currency={currency}
                       canEdit={!completed}
                       busy={settling === person.id}
-                      addingTo={addingTo}
+                      pendingItemId={pendingItemId}
                       onAdd={() => setAddingFor(person)}
-                      onAddOneMore={(itemId) => addOneMore(itemId, person.id)}
+                      onAddOneMore={(itemId) =>
+                        stepLine(
+                          itemId,
+                          () => bill.addOneMore(itemId, person.id),
+                          'Could not add another'
+                        )
+                      }
+                      onRemoveOne={(itemId) =>
+                        stepLine(
+                          itemId,
+                          () => bill.removeOneOf(itemId, person.id),
+                          'Could not remove that'
+                        )
+                      }
                       onToggleSettled={() => toggleSettled(person)}
                     />
                   );

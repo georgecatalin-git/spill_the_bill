@@ -20,9 +20,10 @@ import type { Participant } from '@/lib/types';
  * Somebody who has ordered nothing still gets a card, at zero. A person missing
  * from the list is a person nobody remembers to collect from.
  *
- * What they have ordered is listed underneath, each line with a "+": a table
- * orders the same things again all evening, and the second beer should cost one
- * tap rather than a form.
+ * What they have ordered is listed underneath, each line with a "−" and a "+":
+ * a table orders the same things again all evening, and the second beer should
+ * cost one tap rather than a form — as should undoing the tap that was a
+ * mistake.
  */
 
 /** One item on somebody's card: what it is, how many of it is theirs. */
@@ -47,10 +48,11 @@ type PersonCardProps = {
   /** False once the bill is closed — a settled bill is a record, not a form. */
   canEdit: boolean;
   busy?: boolean;
-  /** Which line is mid-write, so its "+" can stop taking taps. */
-  addingTo?: string | null;
+  /** Which line is mid-write, so its buttons stop taking taps. */
+  pendingItemId?: string | null;
   onAdd: () => void;
   onAddOneMore: (itemId: string) => void;
+  onRemoveOne: (itemId: string) => void;
   onToggleSettled: () => void;
 };
 
@@ -63,9 +65,10 @@ export function PersonCard({
   currency,
   canEdit,
   busy,
-  addingTo,
+  pendingItemId,
   onAdd,
   onAddOneMore,
+  onRemoveOne,
   onToggleSettled,
 }: PersonCardProps) {
   const border = useThemeColor({}, 'border');
@@ -119,26 +122,47 @@ export function PersonCard({
                 {formatCents(line.amountCents, currency)}
               </ThemedText>
 
-              {/* One tap for the next round. Offered only where widening the
-                  line cannot change what anybody else owes. */}
-              {canEdit && line.canAddMore && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`One more ${line.name} for ${person.name}`}
-                  disabled={addingTo === line.itemId}
-                  onPress={() => onAddOneMore(line.itemId)}
-                  hitSlop={8}
-                  style={({ pressed }) => [
-                    styles.plus,
-                    { borderColor: border },
-                    pressed && styles.pressed,
-                  ]}>
-                  {addingTo === line.itemId ? (
-                    <ActivityIndicator size="small" color={textSecondary} />
-                  ) : (
-                    <ThemedText style={styles.plusGlyph}>+</ThemedText>
+              {canEdit && (
+                <View style={styles.steppers}>
+                  {/* Always offered, unlike the "+": taking somebody off a line
+                      never needs it widened, so even a shared platter can be
+                      corrected with "I didn't have any of that". */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`One fewer ${line.name} for ${person.name}`}
+                    disabled={pendingItemId === line.itemId}
+                    onPress={() => onRemoveOne(line.itemId)}
+                    hitSlop={6}
+                    style={({ pressed }) => [
+                      styles.stepper,
+                      { borderColor: border },
+                      pressed && styles.pressed,
+                    ]}>
+                    {pendingItemId === line.itemId ? (
+                      <ActivityIndicator size="small" color={textSecondary} />
+                    ) : (
+                      <ThemedText style={styles.stepperGlyph}>−</ThemedText>
+                    )}
+                  </Pressable>
+
+                  {/* One tap for the next round. Offered only where widening
+                      the line cannot change what anybody else owes. */}
+                  {line.canAddMore && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`One more ${line.name} for ${person.name}`}
+                      disabled={pendingItemId === line.itemId}
+                      onPress={() => onAddOneMore(line.itemId)}
+                      hitSlop={6}
+                      style={({ pressed }) => [
+                        styles.stepper,
+                        { borderColor: border },
+                        pressed && styles.pressed,
+                      ]}>
+                      <ThemedText style={styles.stepperGlyph}>+</ThemedText>
+                    </Pressable>
                   )}
-                </Pressable>
+                </View>
               )}
             </View>
           ))}
@@ -239,7 +263,11 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontVariant: ['tabular-nums'],
   },
-  plus: {
+  steppers: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  stepper: {
     width: 30,
     height: 30,
     borderRadius: 15,
@@ -247,7 +275,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  plusGlyph: {
+  stepperGlyph: {
     fontSize: 18,
     lineHeight: 22,
     fontWeight: '600',

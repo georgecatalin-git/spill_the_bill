@@ -395,6 +395,56 @@ export function useAdminBill(tableId: string | undefined) {
   );
 
   /**
+   * One fewer of an item on that person — the "−" beside a line.
+   *
+   * The inverse of `addOneMore`, and the order inverts with it: the claim comes
+   * down first and the line narrows second, so the row is never left carrying
+   * more claims than it has units.
+   *
+   * What happens to the line depends on who else is on it, and all three cases
+   * are the same sentence read carefully — "one fewer of this, for him":
+   *
+   *   - a counted line narrows by one, and everybody else keeps their units;
+   *   - a shareable line he had to himself goes altogether, because the drink
+   *     was his and the bill should stop charging for it;
+   *   - a shareable line he was splitting stays exactly as it is. Only his
+   *     claim goes, and the price redivides between whoever is left — that is
+   *     what "I didn't have any of that" means on a shared platter.
+   */
+  const removeOneOf = useCallback(
+    async (billItemId: string, participantId: string) => {
+      const item = state.items.find((row) => row.id === billItemId);
+      if (!item) return;
+
+      const held = state.claims[billItemId]?.[participantId] ?? 0;
+      if (held === 0) return;
+
+      const claimedByAll = Object.values(state.claims[billItemId] ?? {}).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const hadItToHimself = claimedByAll === held;
+
+      await assignItemTo(billItemId, participantId, held - 1);
+
+      if (item.quantity > 1) {
+        await updateBillItem(billItemId, {
+          name: item.name,
+          quantity: item.quantity - 1,
+          unitPriceCents: item.unit_price_cents,
+        });
+      } else if (hadItToHimself) {
+        // Safe only now: the claim is gone, so `prevent_claimed_item_delete`
+        // has nothing to object to.
+        await deleteBillItem(billItemId);
+      }
+
+      await load();
+    },
+    [state.items, state.claims, load]
+  );
+
+  /**
    * Records that somebody has paid, then reloads rather than flipping the row
    * here — the database stays the one that says who has settled, and everyone
    * else's screen hears about it on the same channel.
@@ -442,6 +492,7 @@ export function useAdminBill(tableId: string | undefined) {
     assignOne,
     personTotals,
     addOneMore,
+    removeOneOf,
     setSettled,
     myTipCents,
     reload: () => load(),

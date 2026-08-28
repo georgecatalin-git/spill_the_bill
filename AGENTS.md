@@ -99,9 +99,9 @@ It works **from the draft onwards**, before `start_bill`, because that is when
 the ordering happens. `admin_set_participant_claim` only ever refused a
 COMPLETED bill, so nothing had to change for this.
 
-**Each card lists what that person ordered, and every line has a "+".** A table
-orders the same things all evening, so the second beer costs one tap rather than
-a form.
+**Each card lists what that person ordered, and every line has a "−" and a
+"+".** A table orders the same things all evening, so the second beer costs one
+tap rather than a form — as does undoing the tap that was a mistake.
 
 The "+" widens the line and *then* takes the new unit, in that order. Both
 halves matter. A claim on its own would only hand them a second **share** of the
@@ -115,6 +115,24 @@ It is offered only where widening cannot change what anybody else owes: on a
 counted line always, and on a shareable one only when this person is its sole
 claimant. A shared platter gets no "+", because turning it into a counted line
 would rewrite the other claimants' shares without asking them.
+
+**"−" is offered everywhere**, because taking somebody off a line never needs it
+widened. The order inverts with the "+": the claim comes down first and the line
+narrows second, so a row is never left carrying more claims than it has units.
+What happens to the line is the same sentence read carefully — "one fewer of
+this, for him" — and it lands in three places:
+
+- a **counted** line narrows by one, and everybody else keeps their units;
+- a **shareable** line he had to himself goes altogether, because the drink was
+  his and the bill should stop charging for it;
+- a **shareable** line he was splitting stays exactly as it is: only his claim
+  goes, and the price redivides between whoever is left. That is what "I didn't
+  have any of that" means on a shared platter, and it is why the line survives.
+
+All three verified against the live database: a beer at q2 came back to q1 with
+the platter untouched; George off a shared 60.00 platter left Ana paying the
+whole 60.00 with the line still there; and his own beer took its row with it,
+the subtotal dropping by exactly one.
 
 **Somebody who has ordered nothing still gets a card, at zero.** The totals are
 read from `item_claim_shares` through the claim details already loaded, not from
