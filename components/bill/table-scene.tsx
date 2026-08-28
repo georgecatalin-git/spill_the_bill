@@ -7,17 +7,17 @@ import { Radius } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 /**
- * The table itself, in three dimensions: a round top with one small figure
- * seated at it per person, facing each other across it.
+ * The table itself, in three dimensions: a round top with one small figure on a
+ * chair at it per person, talking to each other.
  *
  * It is a picture of the data, not decoration on top of it. Somebody who has
  * paid turns green and sits back; the rest lean in. That is the same thing the
  * cards below say in numbers, said in a shape you can take in without reading.
  *
- * Built from primitives — cylinders, capsules, spheres — so there is no model
- * to load, nothing to fetch, and nothing that can arrive late or not at all.
- * `expo-gl` ships inside Expo Go, so this runs on a phone without a development
- * build, which is the constraint everything else here bends to.
+ * Built from primitives — cylinders, capsules, spheres, boxes — so there is no
+ * model to load, nothing to fetch, and nothing that can arrive late or not at
+ * all. `expo-gl` ships inside Expo Go, so this runs on a phone without a
+ * development build, which is the constraint everything else here bends to.
  */
 
 export type SceneSeat = {
@@ -54,6 +54,8 @@ function canvasFor(gl: ExpoWebGLRenderingContext) {
 
 /** Seated height, so every figure is built against one number. */
 const TABLE_TOP = 0.9;
+const SEAT_HEIGHT = 0.46;
+const SHOULDER = TABLE_TOP + 0.14;
 
 /**
  * How far out the seats sit, and how far back the camera stands.
@@ -64,60 +66,163 @@ const TABLE_TOP = 0.9;
  * real one does.
  */
 function seatRadius(count: number) {
-  return 1.9 + Math.max(0, count - 4) * 0.13;
+  return 1.95 + Math.max(0, count - 4) * 0.14;
 }
 
 /** Everything the scene draws sits inside this sphere, centred on the table. */
 const SCENE_CENTRE_Y = 0.7;
 
 function sceneRadius(count: number) {
-  return seatRadius(count) + 0.45;
+  return seatRadius(count) + 0.55;
 }
 
-/** Vertical field of view. The frame is far wider than it is tall, so this is
- *  always the dimension that runs out first. */
+/**
+ * Vertical field of view. The frame is far wider than it is tall, so this is
+ * always the dimension that runs out first.
+ */
 const FOV = 50;
 
-function buildFigure(seat: SceneSeat, index: number, count: number) {
+/** What somebody is doing with their hands and head at this moment. */
+type Gesture = 'none' | 'nod' | 'shake' | 'shrug' | 'point';
+
+type Actor = {
+  group: THREE.Group;
+  /** Leans and twists. The chair is deliberately not in here. */
+  body: THREE.Group;
+  head: THREE.Group;
+  shoulders: [THREE.Group, THREE.Group];
+  elbows: [THREE.Group, THREE.Group];
+  seat: SceneSeat;
+  /** Where they sit on the ring, in radians. */
+  angle: number;
+  /** Keeps everybody out of step with everybody else. */
+  phase: number;
+  /** Head turn, eased towards the person they are attending to. */
+  yaw: number;
+  lookingAt: number;
+  gesture: Gesture;
+  gestureFrom: number;
+  gestureUntil: number;
+  nextGesture: number;
+};
+
+/**
+ * How far somebody must turn their head to face another seat.
+ *
+ * Everyone faces the middle, so their body already points at whoever is
+ * opposite; this is the correction on top of that. Derived rather than
+ * guessed: a head yawed by `h` on a body seated at `angle` points along
+ * `-(sin, cos)(angle + h)`, so the yaw that aims it at a target direction `d`
+ * is `atan2(-d.x, -d.z) - angle`.
+ */
+function yawBetween(from: Actor, to: Actor, radius: number) {
+  const dx = Math.sin(to.angle) * radius - Math.sin(from.angle) * radius;
+  const dz = Math.cos(to.angle) * radius - Math.cos(from.angle) * radius;
+
+  const wanted = Math.atan2(-dx, -dz) - from.angle;
+
+  // Wrap to the short way round, then stop at what a neck will actually do.
+  const wrapped = Math.atan2(Math.sin(wanted), Math.cos(wanted));
+  return THREE.MathUtils.clamp(wrapped, -1.15, 1.15);
+}
+
+function buildActor(seat: SceneSeat, index: number, count: number, chairColour: THREE.Color): Actor {
   const group = new THREE.Group();
 
-  // The body hangs in a group of its own, and that is what leans.
+  // The body hangs in a group of its own, and that is what leans and twists.
   //
-  // Leaning the outer group would not work: `lookAt` has already turned it to
-  // face the table, so its x axis points along the table's edge rather than
-  // forwards. Setting `rotation.x` there tips somebody sitting at the side of
-  // the table over sideways instead of leaning them in.
+  // Leaning the outer group would not work: it has been turned to face the
+  // table, so its x axis runs along the table's edge rather than forwards, and
+  // `rotation.x` there tips somebody sitting at the side over sideways. The
+  // chair stays outside it, because a chair does not lean when its occupant
+  // does.
   const body = new THREE.Group();
   group.add(body);
 
-  // A hue per seat, spread evenly, so neighbours never share a colour. Somebody
-  // who has paid leaves that scheme entirely — it should be the one thing you
-  // notice about the table at a glance.
   const colour = seat.settled
     ? new THREE.Color(0x3dd68c)
     : new THREE.Color().setHSL((index / Math.max(count, 1) + 0.08) % 1, 0.5, 0.58);
 
   const skin = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.55, metalness: 0.05 });
+  const chairMat = new THREE.MeshStandardMaterial({
+    color: chairColour,
+    roughness: 0.85,
+    metalness: 0,
+  });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.44, 6, 16), skin);
-  torso.position.y = TABLE_TOP - 0.08;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.23, 0.42, 6, 16), skin);
+  torso.position.y = TABLE_TOP - 0.1;
   body.add(torso);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 18), skin);
-  head.position.y = TABLE_TOP + 0.42;
+  // The head pivots at the neck rather than about the figure's feet, so a nod
+  // reads as a nod instead of the whole person rocking.
+  const head = new THREE.Group();
+  head.position.y = TABLE_TOP + 0.24;
   body.add(head);
 
-  // Arms, reaching towards the table. Two capsules is enough to read as "seated
-  // at" rather than "standing near".
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 18), skin);
+  skull.position.y = 0.18;
+  head.add(skull);
+
+  // A nose, only so which way somebody is facing is legible at this size. It is
+  // the whole reason a turned head reads as attention rather than a wobble.
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.1, 10), skin);
+  nose.position.set(0, 0.17, -0.19);
+  nose.rotation.x = -Math.PI / 2;
+  head.add(nose);
+
+  // Two segments with an elbow between them, not one stick.
   //
-  // Negative z is the way they face: `lookAt` points a body's -Z at its target,
-  // so arms placed at +z reach out into the room with their back to the food.
-  for (const side of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.3, 4, 10), skin);
-    arm.position.set(side * 0.26, TABLE_TOP - 0.02, -0.16);
-    arm.rotation.x = 0.75;
-    arm.rotation.z = side * 0.28;
-    body.add(arm);
+  // A rigid arm swinging from the shoulder reads as a scarecrow whatever it is
+  // doing: hands end up wherever the angle throws them, and none of the shapes
+  // people actually make — forearms on the table, palms turned up, a hand held
+  // out — are reachable at all. The elbow is what buys every gesture below.
+  const shoulders: [THREE.Group, THREE.Group] = [new THREE.Group(), new THREE.Group()];
+  const elbows: [THREE.Group, THREE.Group] = [new THREE.Group(), new THREE.Group()];
+
+  shoulders.forEach((shoulder, i) => {
+    const side = i === 0 ? -1 : 1;
+    shoulder.position.set(side * 0.23, SHOULDER, 0);
+    body.add(shoulder);
+
+    // Each segment hangs below its own pivot, so turning a pivot swings it the
+    // way the joint above it does.
+    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.062, 0.16, 4, 10), skin);
+    upper.position.y = -0.11;
+    shoulder.add(upper);
+
+    const elbow = elbows[i];
+    elbow.position.y = -0.22;
+    shoulder.add(elbow);
+
+    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.15, 4, 10), skin);
+    fore.position.y = -0.1;
+    elbow.add(fore);
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.068, 12, 10), skin);
+    hand.position.y = -0.21;
+    elbow.add(hand);
+  });
+
+  const seatPlate = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.06, 0.44), chairMat);
+  seatPlate.position.set(0, SEAT_HEIGHT, 0.02);
+  group.add(seatPlate);
+
+  // Positive z is behind them: a figure faces along its own -z.
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.46, 0.06), chairMat);
+  back.position.set(0, SEAT_HEIGHT + 0.25, 0.22);
+  back.rotation.x = -0.12;
+  group.add(back);
+
+  for (const lx of [-1, 1]) {
+    for (const lz of [-1, 1]) {
+      const leg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.028, 0.028, SEAT_HEIGHT, 8),
+        chairMat
+      );
+      leg.position.set(lx * 0.17, SEAT_HEIGHT / 2, 0.02 + lz * 0.17);
+      group.add(leg);
+    }
   }
 
   const angle = (index / Math.max(count, 1)) * Math.PI * 2;
@@ -130,10 +235,25 @@ function buildFigure(seat: SceneSeat, index: number, count: number) {
   // back, because `lookAt` turns the whole body towards a point above it.
   group.lookAt(0, 0, 0);
 
-  return group;
+  return {
+    group,
+    body,
+    head,
+    shoulders,
+    elbows,
+    seat,
+    angle,
+    phase: index * 1.7,
+    yaw: 0,
+    lookingAt: index,
+    gesture: 'none',
+    gestureFrom: 0,
+    gestureUntil: 0,
+    nextGesture: 2 + Math.random() * 6,
+  };
 }
 
-export function TableScene({ seats, height = 190 }: TableSceneProps) {
+export function TableScene({ seats, height = 210 }: TableSceneProps) {
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
   const textSecondary = useThemeColor({}, 'textSecondary');
@@ -191,8 +311,16 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
     foot.position.y = 0.035;
     scene.add(foot);
 
+    // Chairs read in both themes: the border colour vanishes into the surface in
+    // the dark one, and the table colour is too close to the tabletop.
+    const chairColour = new THREE.Color(textSecondary).multiplyScalar(0.62);
+
     const cast = new THREE.Group();
     scene.add(cast);
+
+    let actors: Actor[] = [];
+    let speaker = 0;
+    let speakerUntil = 0;
 
     function rebuild() {
       // Meshes hold GPU buffers, which outlive the object graph unless they are
@@ -200,7 +328,7 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
       // leak all evening.
       for (const child of [...cast.children]) {
         cast.remove(child);
-        child.traverse((node) => {
+        child.traverse((node: THREE.Object3D) => {
           if (node instanceof THREE.Mesh) {
             node.geometry.dispose();
             (node.material as THREE.Material).dispose();
@@ -209,13 +337,71 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
       }
 
       const current = seatsRef.current;
-      current.forEach((seat, index) => {
-        cast.add(buildFigure(seat, index, current.length));
-      });
+      actors = current.map((seat, index) => buildActor(seat, index, current.length, chairColour));
+      for (const actor of actors) cast.add(actor.group);
+
+      speaker = 0;
+      speakerUntil = 0;
     }
 
     rebuildRef.current = rebuild;
     rebuild();
+
+    /**
+     * Who is talking, and who is watching them.
+     *
+     * A table is not everybody gesturing at once — it is one person holding the
+     * floor while the others attend, and the floor changing hands every few
+     * seconds. Everything the figures do reads as conversation only because of
+     * that one rule; without it they look like a room of people talking to
+     * nobody.
+     */
+    function direct(t: number) {
+      if (actors.length < 2 || t < speakerUntil) return;
+
+      const next = Math.floor(Math.random() * actors.length);
+      speaker = next === speaker ? (speaker + 1) % actors.length : next;
+      speakerUntil = t + 3 + Math.random() * 4;
+
+      actors.forEach((actor, index) => {
+        if (index === speaker) {
+          // Somebody talking looks at one of the people listening, not at the
+          // room.
+          let target = Math.floor(Math.random() * actors.length);
+          if (target === index) target = (index + 1) % actors.length;
+          actor.lookingAt = target;
+        } else {
+          actor.lookingAt = speaker;
+        }
+      });
+    }
+
+    function scheduleGestures(t: number) {
+      for (let i = 0; i < actors.length; i++) {
+        const actor = actors[i];
+        if (t < actor.nextGesture || t < actor.gestureUntil) continue;
+
+        const listening = i !== speaker;
+        const roll = Math.random();
+
+        // Listeners mostly agree, sometimes disagree, sometimes shrug. Somebody
+        // holding the floor points and shrugs instead — nodding along to
+        // yourself reads as a glitch.
+        actor.gesture = listening
+          ? roll < 0.55
+            ? 'nod'
+            : roll < 0.8
+              ? 'shake'
+              : 'shrug'
+          : roll < 0.6
+            ? 'point'
+            : 'shrug';
+
+        actor.gestureFrom = t;
+        actor.gestureUntil = t + (actor.gesture === 'shrug' ? 1.4 : 1.1);
+        actor.nextGesture = actor.gestureUntil + 1.5 + Math.random() * 5;
+      }
+    }
 
     let frame = 0;
     let sized = '';
@@ -235,10 +421,10 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
       const height_ = gl.drawingBufferHeight;
       if (width < 1 || height_ < 1) return false;
 
-      const key = `${width}x${height_}`;
-      if (key === sized) return true;
+      const key_ = `${width}x${height_}`;
+      if (key_ === sized) return true;
 
-      sized = key;
+      sized = key_;
       renderer.setSize(width, height_, false);
       camera.aspect = width / height_;
       camera.updateProjectionMatrix();
@@ -251,14 +437,12 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
 
       const t = (Date.now() - started) / 1000;
 
-      // A slow orbit, so the table reads as a solid thing rather than a picture
-      // of one. Slow enough not to compete with the numbers underneath.
       // Stood back far enough to hold the whole table, worked out rather than
       // guessed. Three rounds of moving the camera by hand all left the nearest
       // seat hanging below the bottom edge at some headcount or other; fitting
       // the sphere the scene lives in cannot, whoever turns up.
       const orbit = t * 0.16;
-      const radius = sceneRadius(seatsRef.current.length);
+      const radius = sceneRadius(actors.length);
       const away = (radius / Math.sin(THREE.MathUtils.degToRad(FOV / 2))) * 1.22;
       const elevation = THREE.MathUtils.degToRad(34);
 
@@ -269,18 +453,91 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
       );
       camera.lookAt(0, SCENE_CENTRE_Y, 0);
 
-      const current = seatsRef.current;
-      cast.children.forEach((figure, index) => {
-        const seat = current[index];
-        // Breathing, out of step with each other — everybody bobbing together
-        // reads as a machine, not a table of people.
-        const phase = index * 1.7;
-        figure.position.y = Math.sin(t * 1.5 + phase) * 0.025;
+      direct(t);
+      scheduleGestures(t);
 
-        // Paid up means sitting back. Still ordering means leaning in.
-        const lean = seat?.settled ? -0.05 : seat?.active ? 0.07 : 0.02;
-        const body = figure.children[0];
-        if (body) body.rotation.x = lean + Math.sin(t * 1.1 + phase) * 0.012;
+      const ring = seatRadius(actors.length);
+
+      actors.forEach((actor, index) => {
+        const talking = index === speaker && actors.length > 1;
+        const target = actors[actor.lookingAt] ?? actor;
+
+        // Eased rather than snapped: a head that arrives instantly reads as a
+        // glitch, and the ease is most of what makes it look like attention.
+        const wanted = target === actor ? 0 : yawBetween(actor, target, ring);
+        actor.yaw += (wanted - actor.yaw) * 0.06;
+
+        const active = t < actor.gestureUntil;
+        const progress = active ? (t - actor.gestureFrom) / (actor.gestureUntil - actor.gestureFrom) : 0;
+        // Fades in and out, so a gesture starts and finishes rather than being
+        // switched on.
+        const strength = active ? Math.sin(progress * Math.PI) : 0;
+        const gesture = active ? actor.gesture : 'none';
+
+        const nod = gesture === 'nod' ? Math.sin(progress * Math.PI * 6) * 0.3 * strength : 0;
+        const shake = gesture === 'shake' ? Math.sin(progress * Math.PI * 7) * 0.42 * strength : 0;
+
+        // Talking moves a head constantly and slightly; listening barely at all.
+        const chatter = talking ? Math.sin(t * 6.5 + actor.phase) * 0.05 : 0;
+
+        actor.head.rotation.y = actor.yaw * 0.68 + shake;
+        actor.head.rotation.x = nod + chatter + (talking ? 0.04 : 0);
+
+        // The shoulders follow the head part of the way. Nobody turns their head
+        // ninety degrees and leaves their chest where it was.
+        const lean = actor.seat.settled ? -0.06 : actor.seat.active ? 0.08 : 0.03;
+        actor.body.rotation.y = actor.yaw * 0.32;
+        actor.body.rotation.x = lean + Math.sin(t * 1.1 + actor.phase) * 0.012;
+
+        // Breathing, out of step with everybody else — a table bobbing together
+        // reads as a machine, not as people.
+        actor.group.position.y = Math.sin(t * 1.5 + actor.phase) * 0.02;
+
+        actor.shoulders.forEach((shoulder, side) => {
+          const sign = side === 0 ? -1 : 1;
+          const elbow = actor.elbows[side];
+
+          // Resting: upper arms down, forearms folded forward onto the table,
+          // which is where hands go when somebody is listening.
+          //
+          // Never quite still, though. Listeners held at exactly the same angle
+          // read as furniture, and one person moving at a table of statues
+          // looks worse than nobody moving at all.
+          const idle = Math.sin(t * 0.9 + actor.phase + side * 2.3);
+          let pitch = 0.32 + idle * 0.05;
+          let spread = sign * (0.16 + idle * 0.03);
+          let bend = 1.35 + Math.sin(t * 0.7 + actor.phase + side) * 0.07;
+
+          if (talking) {
+            // Hands move while the mouth does, the two of them out of phase, so
+            // it reads as gesticulating rather than semaphore. The elbow carries
+            // most of it — that is where the movement is in a real gesture.
+            pitch = 0.3 + Math.sin(t * 3.6 + actor.phase + side * 1.9) * 0.28;
+            spread = sign * (0.24 + Math.sin(t * 2.7 + actor.phase + side) * 0.2);
+            bend = 1.25 + Math.sin(t * 4.4 + actor.phase + side * 2.4) * 0.45;
+          }
+
+          if (gesture === 'shrug') {
+            // Elbows in, forearms out, palms up: "what do you want me to say".
+            pitch = THREE.MathUtils.lerp(pitch, -0.15, strength);
+            spread = THREE.MathUtils.lerp(spread, sign * 0.62, strength);
+            bend = THREE.MathUtils.lerp(bend, 1.75, strength);
+          }
+
+          if (gesture === 'point' && side === 1) {
+            // One arm straightened out towards whoever is being addressed.
+            pitch = THREE.MathUtils.lerp(pitch, 1.35, strength);
+            spread = THREE.MathUtils.lerp(spread, sign * 0.08, strength);
+            bend = THREE.MathUtils.lerp(bend, 0.25, strength);
+          }
+
+          shoulder.rotation.x = pitch;
+          shoulder.rotation.z = spread;
+          // A shrug lifts the shoulders themselves, which is most of what makes
+          // one legible from across a room.
+          shoulder.position.y = SHOULDER + (gesture === 'shrug' ? strength * 0.07 : 0);
+          elbow.rotation.x = bend;
+        });
       });
 
       renderer.render(scene, camera);
@@ -294,12 +551,7 @@ export function TableScene({ seats, height = 190 }: TableSceneProps) {
 
   return (
     <View style={[styles.frame, { backgroundColor: surface, borderColor: border, height }]}>
-      <GLView
-        // A new context per headcount is wasteful; the scene rebuilds its cast
-        // in place instead, and this key only changes if GL itself must restart.
-        style={StyleSheet.absoluteFill}
-        onContextCreate={onContextCreate}
-      />
+      <GLView style={StyleSheet.absoluteFill} onContextCreate={onContextCreate} />
     </View>
   );
 }

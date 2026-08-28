@@ -96,6 +96,34 @@ nothing that can arrive late or not at all.
 It is a picture of the data, not decoration on top of it. Somebody who has paid
 turns green and sits back; whoever is still ordering leans in.
 
+**They are having a conversation, and one rule is what makes it read as one.**
+A table is not everybody gesturing at once — it is one person holding the floor
+while the others attend, and the floor changing hands every few seconds. A
+director picks a speaker, points every listener's head at them, and points the
+speaker at one of the listeners. Without that, the same animation reads as a
+room of people talking to nobody.
+
+On top of it: listeners mostly nod, sometimes shake their head, sometimes
+shrug; the speaker points and shrugs, because nodding along to yourself reads as
+a glitch. Every gesture fades in and out over about a second rather than
+switching on, and nobody is ever quite still — listeners held at exactly the
+same angle read as furniture, and one person moving at a table of statues looks
+worse than nobody moving at all.
+
+**Arms have an elbow.** A rigid arm swinging from the shoulder reads as a
+scarecrow whatever it is doing, and none of the shapes people actually make —
+forearms on the table, palms turned up in a shrug, a hand held out — are
+reachable at all without the second joint. The head pivots at the neck for the
+same reason: pivot it at the feet and a nod becomes the whole person rocking.
+
+**Where a head must turn is derived, not guessed.** Everyone faces the middle,
+so their body already points at whoever is opposite; the yaw is the correction
+on top of that. A head yawed by `h` on a body seated at `angle` points along
+`-(sin, cos)(angle + h)`, so aiming it at a direction `d` needs
+`atan2(-d.x, -d.z) - angle`, clamped to what a neck will do. Checked by hand
+before it was written: at a table of four the neighbour comes out at -45° and
+the person opposite at 0°, which is what facing the middle should give.
+
 Four things about it were wrong on the first attempt and are easy to get wrong
 again:
 
