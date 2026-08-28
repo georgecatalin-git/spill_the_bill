@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native';
 import { GLView, type ExpoWebGLRenderingContext } from 'expo-gl';
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -83,6 +84,9 @@ function sceneRadius(count: number) {
  * always the dimension that runs out first.
  */
 const FOV = 50;
+
+/** Thirty frames a second. See the note in the draw loop. */
+const FRAME_MS = 1000 / 30;
 
 /** What somebody is doing with their hands and head at this moment. */
 type Gesture = 'none' | 'nod' | 'shake' | 'shrug' | 'point' | 'laugh' | 'sip';
@@ -275,6 +279,33 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
   const seatsRef = useRef(seats);
   const rebuildRef = useRef<(() => void) | null>(null);
 
+  /**
+   * Whether the loop should still be drawing, and the frame it has queued.
+   *
+   * This exists because of a bug that made the whole app slower every time the
+   * bill was opened. `onContextCreate` is a plain callback, not a React effect
+   * — GLView throws its return value away — so the `cancelAnimationFrame`
+   * returned from it was never called by anybody. Every visit started another
+   * three.js render loop and none of them ever stopped. Five visits, five
+   * scenes drawing at once, for the rest of the session.
+   */
+  const running = useRef(false);
+  const frame = useRef(0);
+
+  // Nothing to draw for a screen nobody is looking at. Navigating away should
+  // cost nothing at all, and on a phone this is most of the saving.
+  const focused = useIsFocused();
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+
+  useEffect(
+    () => () => {
+      running.current = false;
+      cancelAnimationFrame(frame.current);
+    },
+    []
+  );
+
   const signature = seats.map((seat) => `${seat.id}:${seat.settled}:${seat.active}`).join(',');
 
   useEffect(() => {
@@ -457,8 +488,8 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
       }
     }
 
-    let frame = 0;
     let sized = '';
+    let lastDrawn = 0;
     const started = Date.now();
 
     /**
@@ -486,10 +517,22 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
     }
 
     function draw() {
-      frame = requestAnimationFrame(draw);
+      if (!running.current) return;
+      frame.current = requestAnimationFrame(draw);
+
+      // Idle while the screen is not on top. The context stays alive, so coming
+      // back is instant and does not cost a rebuild.
+      if (!focusedRef.current) return;
       if (!fit()) return;
 
-      const t = (Date.now() - started) / 1000;
+      // Thirty frames a second, not sixty. Nobody can tell the difference on a
+      // table of figures breathing and gesturing, and it halves what this costs
+      // a phone that also has a bill to keep in sync.
+      const now = Date.now();
+      if (now - lastDrawn < FRAME_MS) return;
+      lastDrawn = now;
+
+      const t = (now - started) / 1000;
 
       // Stood back far enough to hold the whole table, worked out rather than
       // guessed. Three rounds of moving the camera by hand all left the nearest
@@ -642,9 +685,8 @@ export function TableScene({ seats, height = 210 }: TableSceneProps) {
       gl.endFrameEXP();
     }
 
+    running.current = true;
     draw();
-
-    return () => cancelAnimationFrame(frame);
   }
 
   return (

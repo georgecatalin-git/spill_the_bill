@@ -19,6 +19,10 @@ export default function RootLayout() {
     headerShadowVisible: false,
     headerStyle: { backgroundColor: theme.background },
     headerTintColor: theme.text,
+    // Without this iOS labels the back button with the previous route's title,
+    // and these screens have none — so it fell through to the file name and
+    // every screen opened from the entry point said "index".
+    headerBackButtonDisplayMode: 'minimal' as const,
   };
 
   return (
