@@ -11,6 +11,7 @@ import { EvenSplit } from '@/components/bill/even-split';
 import { ItemFormModal } from '@/components/bill/item-form-modal';
 import { MyTotal } from '@/components/bill/my-total';
 import { PersonCard } from '@/components/bill/person-card';
+import { TableScene } from '@/components/bill/table-scene';
 import { ReceiptItemRow } from '@/components/bill/receipt-item-row';
 import { TipSplit } from '@/components/bill/tip-split';
 import { ThemedText } from '@/components/themed-text';
@@ -365,6 +366,16 @@ function AdminBillScreen({ tableId }: { tableId: string }) {
               <ThemedText type="label" style={styles.sectionLabel}>
                 At this table · {bill.participants.length}
               </ThemedText>
+
+              {/* The same thing the cards say, in a shape you can take in
+                  without reading: who is here, and who has already paid. */}
+              <TableScene
+                seats={bill.participants.map((person) => ({
+                  id: person.id,
+                  settled: person.settled === true,
+                  active: (bill.personTotals[person.id]?.lines.length ?? 0) > 0,
+                }))}
+              />
 
               <View style={styles.people}>
                 {bill.participants.map((person) => {
