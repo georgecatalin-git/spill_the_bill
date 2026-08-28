@@ -137,6 +137,49 @@ function GuestBillScreen({ sessionToken }: { sessionToken: string }) {
             </ThemedText>
           )}
 
+          {/* The same table the host sees, read-only. A guest can already read
+              every one of these figures off the item rows below — this only
+              gathers them under a name, and shows them who else is here. The
+              cards carry no buttons: adding an item and recording a payment
+              are the admin's, and the database says so. */}
+          {bill.participants.length > 0 && (
+            <View style={styles.section}>
+              <ThemedText type="label" style={styles.sectionLabel}>
+                At this table · {bill.participants.length}
+              </ThemedText>
+
+              <TableScene
+                seats={bill.participants.map((person) => ({
+                  id: person.id,
+                  settled: person.settled === true,
+                  active: (bill.personTotals[person.id]?.lines.length ?? 0) > 0,
+                }))}
+              />
+
+              <View style={styles.people}>
+                {bill.participants.map((person) => {
+                  const totals = bill.personTotals[person.id];
+                  return (
+                    <PersonCard
+                      key={person.id}
+                      person={person}
+                      isMe={person.id === bill.myParticipantId}
+                      totalCents={totals?.totalCents ?? 0}
+                      tipCents={totals?.tipCents ?? 0}
+                      lines={totals?.lines ?? []}
+                      currency={currency}
+                      canEdit={false}
+                      onAdd={() => {}}
+                      onAddOneMore={() => {}}
+                      onRemoveOne={() => {}}
+                      onToggleSettled={() => {}}
+                    />
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {bill.localItems.length === 0 ? (
             <EmptyState
               message="No items yet"

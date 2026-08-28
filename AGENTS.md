@@ -175,6 +175,13 @@ sized for four puts seven shoulder to shoulder.
 old meshes are disposed as it goes: a table where somebody joins every few
 minutes would otherwise leak buffers all evening.
 
+**A guest sees the same table, read-only.** The cards and the scene are on the
+guest screen too — with no Add and no Mark paid, because adding an item and
+recording a payment are the admin's and the database says so. It exposes
+nothing new: `get_guest_items_with_claims` already returns every claimant's
+name and amount, and the item rows already show them. The cards only gather
+those figures under a name.
+
 **The bill is read by person first, items second.** The open bill leads with a
 card per participant — what they owe, and an **Add item** button beside their
 name — and keeps the item list underneath.
@@ -343,6 +350,7 @@ Migrations are the source of truth and are applied in order:
 | `20260827200000_one_definition_of_which_restaurant` | `venue_by_code` dropped; the picker asks the same function the gate does |
 | `20260827220000_a_restaurant_admin_has_a_dashboard` | the restaurant sees its own figures, code and details |
 | `20260827240000_a_new_bill_can_be_read_back` | a SELECT policy must read the row's columns, not look the row up |
+| `20260828000000_a_shared_line_can_always_take_one_more` | a fully assigned bill still lets somebody join a shared line |
 
 Regenerate types after any schema change:
 
@@ -437,6 +445,24 @@ Closed bills are frozen in the database, not only in the UI: `bill_items`,
 `bills` and claim deletion all refuse once a bill is `COMPLETED`. A
 `FULLY_ASSIGNED` bill deliberately still lets a guest lower or clear their own
 claim, otherwise they are stranded on a bill they cannot change.
+
+**And it lets them join a shared line.** `lock_claimable_item` used to demand
+the bill be exactly `OPEN`, which broke the case the shareable line exists for:
+two people, one platter to split, and the first to tick it turns the bill
+`FULLY_ASSIGNED` — a shareable line counts as wholly assigned the moment
+anybody claims it. The second person was refused with "This bill is no longer
+accepting selections" and the first paid the whole 60 lei alone. Measured, on
+the live database, before and after.
+
+The flag's real job is keeping guests off a bill the host is still assembling,
+so that is what it says now: refuse a `DRAFT`, refuse a `COMPLETED`, allow
+everything between. Nothing was loosened. Over-claiming a counted line is
+refused by `claim_item`'s own availability check and by `enforce_claim_rules`,
+both untouched — and both give a better answer than the bill-level one did
+("No bere left." rather than a sentence about the bill). `update_item_claim`
+was fixed by the same change: raising a claim passed `p_quantity > 0` into that
+flag, so a guest on a fully assigned bill could lower their share but never put
+it back.
 
 ## Running it
 

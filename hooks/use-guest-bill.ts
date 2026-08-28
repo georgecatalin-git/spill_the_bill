@@ -7,6 +7,7 @@ import {
   getGuestClaims,
   getGuestEvenShares,
   getGuestReceiptPath,
+  getGuestSettlements,
   getGuestTotals,
   getTipShares,
   updateClaimQuantity,
@@ -14,6 +15,7 @@ import {
   type ClaimedBillItem,
   type EvenShare,
   type ParticipantTotal,
+  type Settlement,
   type TipShare,
 } from '@/lib/services/claim-service';
 import type { BillItem, ClaimMap, Participant } from '@/lib/types';
@@ -32,6 +34,7 @@ export function useGuestBill(sessionToken: string | undefined) {
   const [tipShares, setTipShares] = useState<TipShare[]>([]);
   const [hasReceiptPhoto, setHasReceiptPhoto] = useState(false);
   const [evenShares, setEvenShares] = useState<EvenShare[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [loading, setLoading] = useState(Boolean(sessionToken));
   const [error, setError] = useState<string | null>(null);
 
@@ -45,19 +48,30 @@ export function useGuestBill(sessionToken: string | undefined) {
     if (!keepError) setError(null);
 
     try {
-      // Six calls for the whole bill, not one per item.
-      const [loadedItems, loadedTotals, loadedSummary, loadedTipShares, receiptPath, loadedEven] =
-        await Promise.all([
-          getGuestClaims(sessionToken),
-          getGuestTotals(sessionToken),
-          getBillAssignmentSummary(sessionToken),
-          getTipShares(sessionToken),
-          getGuestReceiptPath(sessionToken),
-          getGuestEvenShares(sessionToken),
-        ]);
+      // One round of calls for the whole bill, not one per item.
+      const [
+        loadedItems,
+        loadedTotals,
+        loadedSummary,
+        loadedTipShares,
+        receiptPath,
+        loadedEven,
+        loadedSettlements,
+      ] = await Promise.all([
+        getGuestClaims(sessionToken),
+        getGuestTotals(sessionToken),
+        getBillAssignmentSummary(sessionToken),
+        getTipShares(sessionToken),
+        getGuestReceiptPath(sessionToken),
+        getGuestEvenShares(sessionToken),
+        // Read-only for a guest, and worth reading: it is how somebody knows
+        // their own payment registered without having to ask.
+        getGuestSettlements(sessionToken),
+      ]);
 
       setItems(loadedItems);
       setTotals(loadedTotals);
+      setSettlements(loadedSettlements);
       setSummary(loadedSummary);
       setTipShares(loadedTipShares);
       setHasReceiptPhoto(Boolean(receiptPath));
@@ -150,8 +164,84 @@ export function useGuestBill(sessionToken: string | undefined) {
       }
     }
 
+    for (const person of people.values()) {
+      person.settled = settlements.some(
+        (row) => row.participant_id === person.id && row.settled
+      );
+    }
+
     return { localItems, claims, amounts, participants: [...people.values()] };
-  }, [items, totals]);
+  }, [items, totals, settlements]);
+
+  /**
+   * What each person at the table owes, in the shape the cards read.
+   *
+   * The same arithmetic the admin's screen does, from the guest's own
+   * authorised reads: `get_guest_totals` already returns everybody, including
+   * anybody who has claimed nothing, and `item.claims` carries the per-person
+   * amounts the database worked out. A guest sees these figures on the item
+   * rows already — this only gathers them under a name.
+   */
+  const personTotals = useMemo(() => {
+    const splitEven = evenShares.length > 0;
+    const totalsByPerson: Record<
+      string,
+      {
+        itemsCents: number;
+        tipCents: number;
+        totalCents: number;
+        lines: {
+          itemId: string;
+          name: string;
+          shares: number;
+          amountCents: number;
+          canAddMore: boolean;
+        }[];
+      }
+    > = {};
+
+    for (const person of view.participants) {
+      if (splitEven) {
+        const share =
+          evenShares.find((row) => row.participant_id === person.id)?.share_cents ?? 0;
+        totalsByPerson[person.id] = {
+          itemsCents: share,
+          tipCents: 0,
+          totalCents: share,
+          lines: [],
+        };
+        continue;
+      }
+
+      const lines = items
+        .map((item) => {
+          const mine = item.claims.find((entry) => entry.participant_id === person.id);
+          return {
+            itemId: item.id,
+            name: item.name,
+            shares: mine?.quantity ?? 0,
+            amountCents: mine?.amount_cents ?? 0,
+            // A guest changes their own selection on the receipt rows, not on
+            // somebody's card. Nothing here offers a "+".
+            canAddMore: false,
+          };
+        })
+        .filter((line) => line.shares > 0);
+
+      const itemsCents = lines.reduce((sum, line) => sum + line.amountCents, 0);
+      const tipCents =
+        tipShares.find((row) => row.participant_id === person.id)?.tip_share_cents ?? 0;
+
+      totalsByPerson[person.id] = {
+        itemsCents,
+        tipCents,
+        totalCents: itemsCents + tipCents,
+        lines,
+      };
+    }
+
+    return totalsByPerson;
+  }, [view.participants, items, tipShares, evenShares]);
 
   const me = totals.find((total) => total.is_me);
   const myTip = tipShares.find((share) => share.is_me);
@@ -178,6 +268,7 @@ export function useGuestBill(sessionToken: string | undefined) {
     myTotalCents: splitEvenly ? myEvenShare : (me?.total_cents ?? 0) + myTipCents,
     myTipCents: splitEvenly ? 0 : myTipCents,
     myParticipantId: me?.participant_id ?? '',
+    personTotals,
     ...view,
     reload: () => load(),
     claim,
