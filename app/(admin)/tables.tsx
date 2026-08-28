@@ -1,6 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TableCard } from '@/components/admin/table-card';
@@ -8,8 +9,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { SkeletonList } from '@/components/ui/skeleton';
 import { Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { enterList, settle } from '@/lib/motion';
 import { openTable, useAdminTables } from '@/lib/services/use-admin-tables';
 
 export default function TablesScreen() {
@@ -28,9 +31,16 @@ export default function TablesScreen() {
           <ScreenHeader title="Tables" />
 
           {loading && tables.length === 0 ? (
-            <ActivityIndicator />
+            // The shape of the list, not a spinner in the middle of nothing:
+            // the page is already laid out when the rows arrive, so they fill
+            // in rather than shove everything down.
+            <SkeletonList rows={3} height={96} />
           ) : tables.length === 0 ? (
-            <EmptyState message="No tables yet" hint="Your tables will appear here." />
+            <EmptyState
+              icon="🍽"
+              message="No tables yet"
+              hint="A table appears here the moment somebody opens one with your Split code."
+            />
           ) : (
             <>
               {active.length > 0 && (
@@ -39,8 +49,10 @@ export default function TablesScreen() {
                     Active · {active.length}
                   </ThemedText>
                   <View style={styles.list}>
-                    {active.map((table) => (
-                      <TableCard key={table.id} table={table} onPress={() => openTable(table)} />
+                    {active.map((table, index) => (
+                      <Animated.View key={table.id} entering={enterList(index)} layout={settle}>
+                        <TableCard table={table} onPress={() => openTable(table)} />
+                      </Animated.View>
                     ))}
                   </View>
                 </View>
@@ -52,8 +64,15 @@ export default function TablesScreen() {
                     Completed · {completed.length}
                   </ThemedText>
                   <View style={styles.list}>
-                    {completed.map((table) => (
-                      <TableCard key={table.id} table={table} onPress={() => openTable(table)} />
+                    {completed.map((table, index) => (
+                      <Animated.View
+                        key={table.id}
+                        // Continues the count from the active list, so the two
+                        // sections read as one sequence rather than restarting.
+                        entering={enterList(active.length + index)}
+                        layout={settle}>
+                        <TableCard table={table} onPress={() => openTable(table)} />
+                      </Animated.View>
                     ))}
                   </View>
                 </View>

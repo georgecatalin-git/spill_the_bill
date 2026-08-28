@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { AnimatedMoney } from '@/components/ui/animated-money';
+import { Card } from '@/components/ui/card';
 import { Radius, Spacing } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { formatCents } from '@/lib/money';
 import type { TableSummary } from '@/lib/types';
 
 type TableCardProps = {
@@ -11,36 +12,50 @@ type TableCardProps = {
   onPress?: () => void;
 };
 
+/**
+ * One session in the list.
+ *
+ * The status is a pill rather than a dot and a word: at a glance down a list of
+ * twenty, a filled shape is read as a colour and a dot is read as punctuation.
+ * Depth and the press come from `Card`, so this behaves like every other
+ * pressable surface in the app without knowing how any of it works.
+ */
 export function TableCard({ table, onPress }: TableCardProps) {
-  const surface = useThemeColor({}, 'surface');
-  const border = useThemeColor({}, 'border');
   const success = useThemeColor({}, 'success');
   const textSecondary = useThemeColor({}, 'textSecondary');
+  const accentSoft = useThemeColor({}, 'accentSoft');
 
   const isActive = table.status === 'active';
 
   return (
-    <Pressable
+    <Card
+      depth={isActive ? 2 : 1}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: surface, borderColor: border },
-        pressed && styles.pressed,
-      ]}>
+      accessibilityRole="button"
+      accessibilityLabel={`${table.name} at ${table.restaurant}, ${
+        table.peopleCount
+      } people, ${isActive ? 'active' : 'completed'}`}
+      style={styles.card}>
       <View style={styles.header}>
         <View style={styles.titles}>
-          <ThemedText style={styles.name} numberOfLines={1}>
+          <ThemedText type="heading" numberOfLines={1}>
             {table.name}
           </ThemedText>
-          <ThemedText type="secondary" style={styles.restaurant} numberOfLines={1}>
+          <ThemedText type="caption" numberOfLines={1}>
             {table.restaurant}
           </ThemedText>
         </View>
 
-        <View style={styles.status}>
+        <View
+          style={[
+            styles.pill,
+            { backgroundColor: isActive ? `${success}22` : accentSoft },
+          ]}>
           <View style={[styles.dot, { backgroundColor: isActive ? success : textSecondary }]} />
-          <ThemedText type="secondary" style={styles.statusLabel}>
-            {isActive ? 'Active' : 'Completed'}
+          <ThemedText
+            type="caption"
+            style={[styles.pillLabel, { color: isActive ? success : textSecondary }]}>
+            {isActive ? 'Active' : 'Closed'}
           </ThemedText>
         </View>
       </View>
@@ -49,21 +64,16 @@ export function TableCard({ table, onPress }: TableCardProps) {
         <ThemedText type="secondary">
           {table.peopleCount} {table.peopleCount === 1 ? 'person' : 'people'}
         </ThemedText>
-        <ThemedText style={styles.total}>{formatCents(table.totalCents, table.currency)}</ThemedText>
+        <AnimatedMoney cents={table.totalCents} currency={table.currency} />
       </View>
-    </Pressable>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.lg,
+    padding: Spacing.md + 2,
     gap: Spacing.md,
-  },
-  pressed: {
-    opacity: 0.7,
   },
   header: {
     flexDirection: 'row',
@@ -72,36 +82,27 @@ const styles = StyleSheet.create({
   },
   titles: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
-  name: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  restaurant: {
-    fontSize: 14,
-  },
-  status: {
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs + 2,
+    gap: 5,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  statusLabel: {
-    fontSize: 13,
+  pillLabel: {
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  total: {
-    fontSize: 17,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
   },
 });
