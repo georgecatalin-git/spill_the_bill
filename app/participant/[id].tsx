@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.sm,
+    paddingTop: Spacing.lg,
     paddingBottom: Spacing.xl,
     gap: Spacing.lg,
   },
